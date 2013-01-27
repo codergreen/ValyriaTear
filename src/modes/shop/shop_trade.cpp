@@ -42,7 +42,8 @@ TradeInterface::TradeInterface() :
     _view_mode(SHOP_VIEW_MODE_INVALID),
     _selected_object(NULL),
     _trade_deal_types(0),
-    _current_category(0)
+    _current_category(0),
+    _trade_placeholder(0)
 {
     _category_header.SetStyle(TextStyle("title24"));
     _category_header.SetText(UTranslate("Category"));
@@ -282,6 +283,7 @@ void TradeInterface::Update()
 {
     if(_view_mode == SHOP_VIEW_MODE_LIST) {
         if(InputManager->ConfirmPress()) {
+            _trade_placeholder = 0;
             _ChangeViewMode(SHOP_VIEW_MODE_INFO);
         } else if(InputManager->CancelPress()) {
             ShopMode::CurrentInstance()->ChangeState(SHOP_STATE_ROOT);
@@ -340,6 +342,19 @@ void TradeInterface::Update()
             } else
                 ShopMode::CurrentInstance()->Media()->GetSound("bump")->Play();
         }
+
+        else if(InputManager->UpPress()) {
+            --_trade_placeholder;
+            if(_trade_placeholder<0){
+                _trade_placeholder=0;
+            }
+        }
+        else if(InputManager->DownPress()) {
+            ++_trade_placeholder;
+            if(_trade_placeholder>_selected_object->GetObject()->GetTradeConditions().size()-2){
+                _trade_placeholder=(_selected_object->GetObject()->GetTradeConditions().size()-2);
+            }
+        }
     }
 
     _category_display.Update();
@@ -377,6 +392,33 @@ void TradeInterface::Draw()
         _selected_properties.Draw();
 
         _category_display.Draw();
+
+        //Draw trade conditions
+        VideoManager->SetDrawFlags(VIDEO_X_LEFT, VIDEO_Y_CENTER, 0);
+        VideoManager->Move(600.0f, 400.0f);
+        //If all items fit, display all
+        if(_selected_object->GetObject()->GetTradeConditions().size()<=2){
+            for(uint32 i=0;i<_selected_object->GetObject()->GetTradeConditions().size();++i){
+                GlobalObject* temp = GlobalCreateNewObject(_selected_object->GetObject()->GetTradeConditions()[i].first,1);
+                temp->GetIconImage().Draw();
+                VideoManager->MoveRelative(65.0f, 0.0f);
+                TextImage(temp->GetName()).Draw();
+                VideoManager->MoveRelative(300.0f, 0.0f);
+                TextImage("x"+NumberToString(_selected_object->GetObject()->GetTradeConditions()[i].second)).Draw();
+                VideoManager->MoveRelative(-365.0f, -55.0f);
+            }
+        }
+        else{ //Else display max that fit
+            for(uint32 i=0;i<2;++i){
+                GlobalObject* temp = GlobalCreateNewObject(_selected_object->GetObject()->GetTradeConditions()[i+_trade_placeholder].first,1);
+                temp->GetIconImage().Draw();
+                VideoManager->MoveRelative(65.0f, 0.0f);
+                TextImage(temp->GetName()).Draw();
+                VideoManager->MoveRelative(300.0f, 0.0f);
+                TextImage("x"+NumberToString(_selected_object->GetObject()->GetTradeConditions()[i+_trade_placeholder].second)).Draw();
+                VideoManager->MoveRelative(-365.0f, -55.0f);
+            }
+        }
     }
 
     ShopMode::CurrentInstance()->ObjectViewer()->Draw();
@@ -408,7 +450,6 @@ void TradeInterface::_ChangeViewMode(SHOP_VIEW_MODE new_mode)
         _selected_name.SetText(_selected_object->GetObject()->GetName());
         _selected_icon = _selected_object->GetObject()->GetIconImage();
         _selected_icon.SetDimensions(30.0f, 30.0f);
-        //TODO add trade conditions listing
         _selected_properties.SetOptionText(0, MakeUnicodeString(NumberToString(_selected_object->GetTradePrice())));
         _selected_properties.SetOptionText(1, MakeUnicodeString("×" + NumberToString(_selected_object->GetStockCount())));
         _selected_properties.SetOptionText(2, MakeUnicodeString("×" + NumberToString(_selected_object->GetOwnCount())));

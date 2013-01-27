@@ -110,6 +110,9 @@ private:
     //! \brief A single row option box containing the selected object's properties
     hoa_gui::OptionBox _selected_properties;
 
+    //! \brief Holds the place of the trade conditions
+    int32 _trade_placeholder;
+
     /**
     ***  Update the available deal types. Called only in _RefreshItemCategories().
     */

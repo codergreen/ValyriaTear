@@ -1008,10 +1008,8 @@ void ShopObjectViewer::_DrawEquipment()
         // In list view mode, draw the sprites to the right of the icons
         VideoManager->MoveRelative(60.0f, 15.0f);
     } else { // (_view_mode == SHOP_VIEW_MODE_INFO)
-        // In info view mode, draw the spites centered on the screen in a row below the other equipment data
-        VideoManager->Move(512.0f, 475.0f);
-        float x_offset = -20.0f * _character_sprites.size();
-        VideoManager->MoveRelative(x_offset, 0.0f);
+        // In info view mode, draw on the left side
+        VideoManager->Move(150.0f, 475.0f);
     }
     for(uint32 i = 0; i < _character_sprites.size(); i++) {
         // In list mode, there's only enough room to show 8 sprites
