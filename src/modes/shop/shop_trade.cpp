@@ -42,8 +42,7 @@ TradeInterface::TradeInterface() :
     _view_mode(SHOP_VIEW_MODE_INVALID),
     _selected_object(NULL),
     _trade_deal_types(0),
-    _current_category(0),
-    _trade_placeholder(0)
+    _current_category(0)
 {
     _category_header.SetStyle(TextStyle("title24"));
     _category_header.SetText(UTranslate("Category"));
@@ -70,6 +69,15 @@ TradeInterface::TradeInterface() :
     _selected_properties.AddOption(ustring());
     _selected_properties.AddOption(ustring());
     _selected_properties.AddOption(ustring());
+
+    _conditions.SetOwner(ShopMode::CurrentInstance()->GetMiddleWindow());
+    _conditions.SetPosition(180.0f, 300.0f);
+    _conditions.SetDimensions(600.0f, 30.0f, 2, 255, 2, 1);
+    _conditions.SetOptionAlignment(VIDEO_X_LEFT, VIDEO_Y_CENTER);
+    _conditions.SetTextStyle(TextStyle("text22"));
+    _conditions.SetCursorState(VIDEO_CURSOR_STATE_HIDDEN);
+    _conditions.SetHorizontalWrapMode(VIDEO_WRAP_MODE_NONE);
+    _conditions.SetVerticalWrapMode(VIDEO_WRAP_MODE_STRAIGHT);
 }
 
 
@@ -283,7 +291,6 @@ void TradeInterface::Update()
 {
     if(_view_mode == SHOP_VIEW_MODE_LIST) {
         if(InputManager->ConfirmPress()) {
-            _trade_placeholder = 0;
             _ChangeViewMode(SHOP_VIEW_MODE_INFO);
         } else if(InputManager->CancelPress()) {
             ShopMode::CurrentInstance()->ChangeState(SHOP_STATE_ROOT);
@@ -342,19 +349,6 @@ void TradeInterface::Update()
             } else
                 ShopMode::CurrentInstance()->Media()->GetSound("bump")->Play();
         }
-
-        else if(InputManager->UpPress()) {
-            --_trade_placeholder;
-            if(_trade_placeholder<0){
-                _trade_placeholder=0;
-            }
-        }
-        else if(InputManager->DownPress()) {
-            ++_trade_placeholder;
-            if(_trade_placeholder>_selected_object->GetObject()->GetTradeConditions().size()-2){
-                _trade_placeholder=(_selected_object->GetObject()->GetTradeConditions().size()-2);
-            }
-        }
     }
 
     _category_display.Update();
@@ -390,35 +384,18 @@ void TradeInterface::Draw()
         VideoManager->MoveRelative(30.0f, 0.0f);
         _selected_name.Draw();
         _selected_properties.Draw();
+        //Update _conditions and return true
+        _conditions.ClearOptions();
+        for(uint32 i = 0; i < _selected_object->GetObject()->GetTradeConditions().size(); ++i) {
+            GlobalObject* temp = GlobalCreateNewObject(_selected_object->GetObject()->GetTradeConditions()[i].first,1);
+            _conditions.AddOption(MakeUnicodeString("<" + temp->GetIconImage().GetFilename() + "><30>")
+                                     + temp->GetName());
+            _conditions.GetEmbeddedImage(i)->SetDimensions(30.0f, 30.0f);
+            _conditions.AddOption(MakeUnicodeString("×" + NumberToString(_selected_object->GetObject()->GetTradeConditions()[i].second)));
+        }
+        _conditions.Draw();
 
         _category_display.Draw();
-
-        //Draw trade conditions
-        VideoManager->SetDrawFlags(VIDEO_X_LEFT, VIDEO_Y_CENTER, 0);
-        VideoManager->Move(600.0f, 400.0f);
-        //If all items fit, display all
-        if(_selected_object->GetObject()->GetTradeConditions().size()<=2){
-            for(uint32 i=0;i<_selected_object->GetObject()->GetTradeConditions().size();++i){
-                GlobalObject* temp = GlobalCreateNewObject(_selected_object->GetObject()->GetTradeConditions()[i].first,1);
-                temp->GetIconImage().Draw();
-                VideoManager->MoveRelative(65.0f, 0.0f);
-                TextImage(temp->GetName()).Draw();
-                VideoManager->MoveRelative(300.0f, 0.0f);
-                TextImage("x"+NumberToString(_selected_object->GetObject()->GetTradeConditions()[i].second)).Draw();
-                VideoManager->MoveRelative(-365.0f, -55.0f);
-            }
-        }
-        else{ //Else display max that fit
-            for(uint32 i=0;i<2;++i){
-                GlobalObject* temp = GlobalCreateNewObject(_selected_object->GetObject()->GetTradeConditions()[i+_trade_placeholder].first,1);
-                temp->GetIconImage().Draw();
-                VideoManager->MoveRelative(65.0f, 0.0f);
-                TextImage(temp->GetName()).Draw();
-                VideoManager->MoveRelative(300.0f, 0.0f);
-                TextImage("x"+NumberToString(_selected_object->GetObject()->GetTradeConditions()[i+_trade_placeholder].second)).Draw();
-                VideoManager->MoveRelative(-365.0f, -55.0f);
-            }
-        }
     }
 
     ShopMode::CurrentInstance()->ObjectViewer()->Draw();
@@ -500,8 +477,9 @@ bool TradeInterface::_ChangeSelection(bool up_or_down)
 
     ShopObject *last_obj = _selected_object;
     _selected_object = _list_displays[_current_category]->GetSelectedObject();
-    if(last_obj == _selected_object)
+    if(last_obj == _selected_object){
         return false;
+    }
     else
         return true;
 }
