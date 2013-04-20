@@ -1,5 +1,6 @@
 ///////////////////////////////////////////////////////////////////////////////
-//            Copyright (C) 2004-2010 by The Allacrost Project
+//            Copyright (C) 2004-2011 by The Allacrost Project
+//            Copyright (C) 2012-2013 by Bertram (Valyria Tear)
 //                         All Rights Reserved
 //
 // This code is licensed under the GNU GPL version 2. It is free software
@@ -10,7 +11,8 @@
 /** ****************************************************************************
 *** \file    script.cpp
 *** \author  Daniel Steuernol - steu@allacrost.org,
-***          Tyler Olsen - roots@allacrost.org
+*** \author  Tyler Olsen - roots@allacrost.org
+*** \author  Yohann Ferreira, yohann ferreira orange fr
 ***
 *** \brief   Source file for the scripting engine.
 *** ***************************************************************************/
@@ -23,12 +25,12 @@
 
 using namespace luabind;
 
-using namespace hoa_utils;
-using namespace hoa_script::private_script;
+using namespace vt_utils;
+using namespace vt_script::private_script;
 
-template<> hoa_script::ScriptEngine *Singleton<hoa_script::ScriptEngine>::_singleton_reference = NULL;
+template<> vt_script::ScriptEngine *Singleton<vt_script::ScriptEngine>::_singleton_reference = NULL;
 
-namespace hoa_script
+namespace vt_script
 {
 
 ScriptEngine *ScriptManager = NULL;
@@ -102,7 +104,7 @@ void ScriptEngine::_AddOpenFile(ScriptDescriptor *sd)
     // NOTE: This function assumes that the file is not already open
     _open_files.insert(std::make_pair(sd->_filename, sd));
     // Add the lua_State to the list of opened lua states if it is not already present
-    if(sd->GetAccessMode() == SCRIPT_READ || sd->GetAccessMode() == SCRIPT_MODIFY) {
+    if(sd->GetAccessMode() == SCRIPT_READ) {
         ReadScriptDescriptor *rsd = dynamic_cast<ReadScriptDescriptor *>(sd);
         if(_open_threads.find(rsd->GetFilename()) == _open_threads.end())
             _open_threads[rsd->GetFilename()] = rsd->_lstack;
@@ -131,4 +133,4 @@ lua_State *ScriptEngine::_CheckForPreviousLuaState(const std::string &filename)
 }
 
 
-} // namespace hoa_script
+} // namespace vt_script

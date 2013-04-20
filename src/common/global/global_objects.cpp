@@ -1,5 +1,6 @@
 ////////////////////////////////////////////////////////////////////////////////
-//            Copyright (C) 2004-2010 by The Allacrost Project
+//            Copyright (C) 2004-2011 by The Allacrost Project
+//            Copyright (C) 2012-2013 by Bertram (Valyria Tear)
 //                         All Rights Reserved
 //
 // This code is licensed under the GNU GPL version 2. It is free software
@@ -10,6 +11,7 @@
 /** ****************************************************************************
 *** \file    global_objects.cpp
 *** \author  Tyler Olsen, roots@allacrost.org
+*** \author  Yohann Ferreira, yohann ferreira orange fr
 *** \brief   Source file for global game objects
 *** ***************************************************************************/
 
@@ -19,32 +21,36 @@
 #include "engine/script/script.h"
 #include "engine/video/video.h"
 
-using namespace hoa_utils;
-using namespace hoa_script;
-using namespace hoa_video;
-using namespace hoa_global::private_global;
+using namespace vt_utils;
+using namespace vt_script;
+using namespace vt_video;
+using namespace vt_global::private_global;
 
-namespace hoa_global
+namespace vt_global
 {
 
 ////////////////////////////////////////////////////////////////////////////////
 // GlobalObject class
 ////////////////////////////////////////////////////////////////////////////////
 
-void GlobalObject::_LoadObjectData(hoa_script::ReadScriptDescriptor &script)
+void GlobalObject::_LoadObjectData(vt_script::ReadScriptDescriptor &script)
 {
     _name = MakeUnicodeString(script.ReadString("name"));
     _description = MakeUnicodeString(script.ReadString("description"));
     _price = script.ReadUInt("standard_price");
     _LoadTradeConditions(script);
     std::string icon_file = script.ReadString("icon");
-    if(_icon_image.Load(icon_file) == false) {
-        IF_PRINT_WARNING(GLOBAL_DEBUG) << "failed to load icon image for item: " << _id << std::endl;
-        _InvalidateObject();
+    if (script.DoesBoolExist("key_item"))
+        _is_key_item = script.ReadBool("key_item");
+    if(!_icon_image.Load(icon_file)) {
+        PRINT_WARNING << "failed to load icon image for item: " << _id << std::endl;
+
+        // try a default icon in that case
+        _icon_image.Load("img/icons/battle/default_special.png");
     }
 }
 
-void GlobalObject::_LoadElementalEffects(hoa_script::ReadScriptDescriptor &script)
+void GlobalObject::_LoadElementalEffects(vt_script::ReadScriptDescriptor &script)
 {
     if(!script.DoesTableExist("elemental_effects"))
         return;
@@ -73,7 +79,7 @@ void GlobalObject::_LoadElementalEffects(hoa_script::ReadScriptDescriptor &scrip
     script.CloseTable(); // elemental_effects
 }
 
-void GlobalObject::_LoadStatusEffects(hoa_script::ReadScriptDescriptor &script)
+void GlobalObject::_LoadStatusEffects(vt_script::ReadScriptDescriptor &script)
 {
     if(!script.DoesTableExist("status_effects"))
         return;
@@ -97,13 +103,28 @@ void GlobalObject::_LoadStatusEffects(hoa_script::ReadScriptDescriptor &script)
         if(intensity < GLOBAL_INTENSITY_NEUTRAL || intensity >= GLOBAL_INTENSITY_TOTAL)
             continue;
 
+        // Check whether an opposite effect exists.
+        bool effect_replaced = false;
+        for (uint32 j = 0; j < _status_effects.size(); ++j) {
+            GLOBAL_STATUS opposite_effect = GetOppositeStatusEffect((GLOBAL_STATUS) key);
+            if (_status_effects[j].first != opposite_effect)
+                continue;
+
+            PRINT_WARNING << "The item (id:" << _id << ") has opposing passive status effects." << std::endl;
+            effect_replaced = true;
+            break;
+        }
+
+        if (effect_replaced)
+            continue;
+
         _status_effects.push_back(std::pair<GLOBAL_STATUS, GLOBAL_INTENSITY>((GLOBAL_STATUS)key, (GLOBAL_INTENSITY)intensity));
     }
 
     script.CloseTable(); // status_effects
 }
 
-void GlobalObject::_LoadTradeConditions(hoa_script::ReadScriptDescriptor &script)
+void GlobalObject::_LoadTradeConditions(vt_script::ReadScriptDescriptor &script)
 {
     if(!script.DoesTableExist("trade_conditions"))
         return;
@@ -142,15 +163,15 @@ GlobalItem::GlobalItem(uint32 id, uint32 count) :
     _warmup_time(0),
     _cooldown_time(0)
 {
-    if((_id == 0) || (_id > MAX_ITEM_ID)) {
-        IF_PRINT_WARNING(GLOBAL_DEBUG) << "invalid id in constructor: " << _id << std::endl;
+    if(_id == 0 || (_id > MAX_ITEM_ID && (_id <= MAX_SHARD_ID && _id > MAX_KEY_ITEM_ID))) {
+        PRINT_WARNING << "invalid id in constructor: " << _id << std::endl;
         _InvalidateObject();
         return;
     }
 
     ReadScriptDescriptor &script_file = GlobalManager->GetItemsScript();
     if(script_file.DoesTableExist(_id) == false) {
-        IF_PRINT_WARNING(GLOBAL_DEBUG) << "no valid data for item in definition file: " << _id << std::endl;
+        PRINT_WARNING << "no valid data for item in definition file: " << _id << std::endl;
         _InvalidateObject();
         return;
     }
@@ -168,10 +189,8 @@ GlobalItem::GlobalItem(uint32 id, uint32 count) :
 
     script_file.CloseTable();
     if(script_file.IsErrorDetected()) {
-        if(GLOBAL_DEBUG) {
-            PRINT_WARNING << "one or more errors occurred while reading item data - they are listed below"
-                          << std::endl << script_file.GetErrorMessages() << std::endl;
-        }
+        PRINT_WARNING << "one or more errors occurred while reading item data - they are listed below"
+                        << std::endl << script_file.GetErrorMessages() << std::endl;
         _InvalidateObject();
     }
 } // void GlobalItem::GlobalItem(uint32 id, uint32 count = 1)
@@ -239,13 +258,21 @@ GlobalWeapon::GlobalWeapon(uint32 id, uint32 count) :
     _usable_by = script_file.ReadUInt("usable_by");
 
     uint32 shards_number = script_file.ReadUInt("slots");
+    // Only permit a max of 5 shards for equipment
+    if (shards_number > 5) {
+        shards_number = 5;
+        PRINT_WARNING << "More than 5 shards declared in item " << _id << std::endl;
+    }
     _shard_slots.resize(shards_number, NULL);
-    // TODO: Load equipped shards data
 
     // Load the possible battle ammo animated image filename.
     _ammo_image_file = script_file.ReadString("battle_ammo_animation_file");
 
-    script_file.CloseTable();
+    // Load the weapon battle animation info
+    if (script_file.DoesTableExist("battle_animations"))
+        _LoadWeaponBattleAnimations(script_file);
+
+    script_file.CloseTable(); // id
     if(script_file.IsErrorDetected()) {
         if(GLOBAL_DEBUG) {
             PRINT_WARNING << "one or more errors occurred while reading weapon data - they are listed below"
@@ -254,6 +281,58 @@ GlobalWeapon::GlobalWeapon(uint32 id, uint32 count) :
         _InvalidateObject();
     }
 } // void GlobalWeapon::GlobalWeapon(uint32 id, uint32 count = 1)
+
+const std::string& GlobalWeapon::GetWeaponAnimationFile(uint32 character_id, const std::string& animation_alias)
+{
+    if (_weapon_animations.find(character_id) == _weapon_animations.end())
+        return _empty_string;
+
+    const std::map<std::string, std::string>& char_map = _weapon_animations.at(character_id);
+    if (char_map.find(animation_alias) == char_map.end())
+        return _empty_string;
+
+    return char_map.at(animation_alias);
+}
+
+void GlobalWeapon::_LoadWeaponBattleAnimations(ReadScriptDescriptor& script)
+{
+    //std::map <uint32, std::map<std::string, std::string> > _weapon_animations;
+    _weapon_animations.clear();
+
+    // The character id keys
+    std::vector<uint32> char_ids;
+
+    script.ReadTableKeys("battle_animations", char_ids);
+    if (char_ids.empty())
+        return;
+
+    if (!script.OpenTable("battle_animations"))
+        return;
+
+    for (uint32 i = 0; i < char_ids.size(); ++i) {
+        uint32 char_id = char_ids[i];
+
+        // Read all the animation aliases
+        std::vector<std::string> anim_aliases;
+        script.ReadTableKeys(char_id, anim_aliases);
+
+        if (anim_aliases.empty())
+            continue;
+
+        if (!script.OpenTable(char_id))
+            continue;
+
+        for (uint32 j = 0; j < anim_aliases.size(); ++j) {
+            std::string anim_alias = anim_aliases[j];
+            std::string anim_file = script.ReadString(anim_alias);
+            _weapon_animations[char_id].insert(std::make_pair<std::string, std::string>(anim_alias, anim_file));
+        }
+
+        script.CloseTable(); // char_id
+    }
+
+    script.CloseTable(); // battle_animations
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 // GlobalArmor class
@@ -307,8 +386,12 @@ GlobalArmor::GlobalArmor(uint32 id, uint32 count) :
     _usable_by = script_file->ReadUInt("usable_by");
 
     uint32 shards_number = script_file->ReadUInt("slots");
+    // Only permit a max of 5 shards for equipment
+    if (shards_number > 5) {
+        shards_number = 5;
+        PRINT_WARNING << "More than 5 shards declared in item " << _id << std::endl;
+    }
     _shard_slots.resize(shards_number, NULL);
-    // TODO: Load equipped shards data
 
     script_file->CloseTable();
     if(script_file->IsErrorDetected()) {
@@ -371,38 +454,4 @@ GlobalShard::GlobalShard(uint32 id, uint32 count) :
 // 	}
 } // void GlobalShard::GlobalShard(uint32 id, uint32 count = 1)
 
-////////////////////////////////////////////////////////////////////////////////
-// GlobalKeyItem class
-////////////////////////////////////////////////////////////////////////////////
-
-GlobalKeyItem::GlobalKeyItem(uint32 id, uint32 count) :
-    GlobalObject(id, count)
-{
-    if((_id <= MAX_SHARD_ID) || (_id > MAX_KEY_ITEM_ID)) {
-        IF_PRINT_WARNING(GLOBAL_DEBUG) << "invalid id in constructor: " << _id << std::endl;
-        _InvalidateObject();
-        return;
-    }
-
-    ReadScriptDescriptor &script_file = GlobalManager->GetKeyItemsScript();
-    if(script_file.DoesTableExist(_id) == false) {
-        IF_PRINT_WARNING(GLOBAL_DEBUG) << "no valid data for key item in definition file: " << _id << std::endl;
-        _InvalidateObject();
-        return;
-    }
-
-    // Load the item data from the script
-    script_file.OpenTable(_id);
-    _LoadObjectData(script_file);
-
-    script_file.CloseTable();
-    if(script_file.IsErrorDetected()) {
-        if(GLOBAL_DEBUG) {
-            PRINT_WARNING << "one or more errors occurred while reading key item data - they are listed below"
-                          << std::endl << script_file.GetErrorMessages() << std::endl;
-        }
-        _InvalidateObject();
-    }
-} // void GlobalKeyItem::GlobalKeyItem(uint32 id, uint32 count = 1)
-
-} // namespace hoa_global
+} // namespace vt_global

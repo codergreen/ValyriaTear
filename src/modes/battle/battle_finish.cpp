@@ -1,5 +1,6 @@
 ////////////////////////////////////////////////////////////////////////////////
-//            Copyright (C) 2004-2010 by The Allacrost Project
+//            Copyright (C) 2004-2011 by The Allacrost Project
+//            Copyright (C) 2012-2013 by Bertram (Valyria Tear)
 //                         All Rights Reserved
 //
 // This code is licensed under the GNU GPL version 2. It is free software and
@@ -10,6 +11,7 @@
 /** ****************************************************************************
 *** \file    battle_finish.cpp
 *** \author  Tyler Olsen, roots@allacrost.org
+*** \author  Yohann Ferreira, yohann ferreira orange fr
 *** \brief   Source file for battle finish menu
 *** ***************************************************************************/
 
@@ -26,17 +28,18 @@
 #include "modes/battle/battle_utils.h"
 
 #include "modes/boot/boot.h"
+#include <boost/concept_check.hpp>
 
-using namespace hoa_utils;
-using namespace hoa_audio;
-using namespace hoa_video;
-using namespace hoa_gui;
-using namespace hoa_input;
-using namespace hoa_mode_manager;
-using namespace hoa_system;
-using namespace hoa_global;
+using namespace vt_utils;
+using namespace vt_audio;
+using namespace vt_video;
+using namespace vt_gui;
+using namespace vt_input;
+using namespace vt_mode_manager;
+using namespace vt_system;
+using namespace vt_global;
 
-namespace hoa_battle
+namespace vt_battle
 {
 
 namespace private_battle
@@ -88,15 +91,11 @@ CharacterGrowth::CharacterGrowth(GlobalCharacter* ch) :
 
 
 void CharacterGrowth::UpdateGrowthData() {
-    bool remaining_growth = true;
-    bool level_gained = false;
+    while (_character->ReachedNewExperienceLevel()) {
+        // Makes the character gain its level.
+        _character->AcknowledgeGrowth();
 
-    // The logic required to update this data can be a bit tricky. We have to retrieve all of the stat growth
-    // prior to calling AcknowledgeGrowth() because that call will reset the stat data. However, the list of
-    // new skills learned is not available until after calling AcknowledgeGrowth to process the new level gained
-    // (if any). And of course multiple AcknowledgeGrowth() calls may have to be made. The structure of the loop
-    // below addresses all of these cases.
-    while (remaining_growth == true) {
+        // Update the battle finish growth info members
         hit_points += _character->GetHitPointsGrowth();
         skill_points += _character->GetSkillPointsGrowth();
         strength += _character->GetStrengthGrowth();
@@ -106,20 +105,15 @@ void CharacterGrowth::UpdateGrowthData() {
         agility += _character->GetAgilityGrowth();
         evade += _character->GetEvadeGrowth();
 
-        level_gained = _character->ReachedNewExperienceLevel();
-        remaining_growth = _character->AcknowledgeGrowth();
+        ++_experience_levels_gained;
+        AudioManager->PlaySound("snd/levelup.wav");
 
-        if (level_gained == true) {
-            _experience_levels_gained++;
-            AudioManager->PlaySound("snd/levelup.wav");
-
-            // New skills are only found in growth data when the character has reached a new level
-            // Note that the character's new skills learned container will be cleared upon the next
-            // call to AcknowledgeGrowth, so skills will not be duplicated in the skills_learned container
-            std::vector<GlobalSkill*>* skills = _character->GetNewSkillsLearned();
-            for (uint32 i = 0; i < skills->size(); i++) {
-                skills_learned.push_back(skills->at(i));
-            }
+        // New skills are only found in growth data when the character has reached a new level
+        // Note that the character's new skills learned container will be cleared upon the next
+        // call to AcknowledgeGrowth, so skills will not be duplicated in the skills_learned container
+        std::vector<GlobalSkill*>* skills = _character->GetNewSkillsLearned();
+        for (uint32 i = 0; i < skills->size(); i++) {
+            skills_learned.push_back(skills->at(i));
         }
     }
 }
@@ -323,7 +317,7 @@ void FinishDefeatAssistant::_SetTooltipText()
 
 FinishVictoryAssistant::FinishVictoryAssistant(FINISH_STATE &state) :
     _state(state),
-    _number_characters(0),
+    _characters_number(0),
     _xp_earned(0),
     _drunes_dropped(0),
     _begin_counting(false),
@@ -371,6 +365,8 @@ FinishVictoryAssistant::FinishVictoryAssistant(FINISH_STATE &state) :
 
     for(uint32 i = 0; i < 4; i++) {
         _growth_list[i].SetOwner(&(_character_window[i]));
+        _raw_xp_given[i] = true;
+        _raw_xp_won[i] = false;
     }
 
     _object_header_text.SetOwner(&_spoils_window);
@@ -416,11 +412,14 @@ FinishVictoryAssistant::~FinishVictoryAssistant()
 
 void FinishVictoryAssistant::Initialize()
 {
-    // ----- (1): Prepare all character data
+    // Prepare all character data
     std::deque<BattleCharacter *>& all_characters = BattleMode::CurrentInstance()->GetCharacterActors();
-    _number_characters = all_characters.size();
+    // Reinit the number of living characters
+    uint32 alive_characters_number = 0;
 
-    for(uint32 i = 0; i < _number_characters; ++i) {
+    _characters_number = all_characters.size();
+
+    for(uint32 i = 0; i < _characters_number; ++i) {
         _characters.push_back(all_characters[i]->GetGlobalCharacter());
         _character_growths.push_back(CharacterGrowth(_characters[i]));
         _character_portraits[i] = all_characters[i]->GetPortrait();
@@ -429,16 +428,18 @@ void FinishVictoryAssistant::Initialize()
         if(!_character_portraits[i].GetFilename().empty())
             _character_portraits[i].SetDimensions(100.0f, 100.0f);
 
-        // Gray out portraits of deceased characters
-        if(!all_characters[i]->IsAlive()) {
-            _character_portraits[i].EnableGrayScale();
-        } else {
+        if(all_characters[i]->IsAlive()) {
             // Set up the victory animation for the living beings
             all_characters[i]->ChangeSpriteAnimation("victory");
+            // Adds a living player to later split xp with.
+            ++alive_characters_number;
+        } else {
+            // Gray out portraits of deceased characters
+            _character_portraits[i].EnableGrayScale();
         }
     }
 
-    // ----- (2): Collect the XP, drunes, and dropped objects for each defeated enemy
+    // Collect the XP, drunes, and dropped objects for each defeated enemy
     std::deque<BattleEnemy *>& all_enemies = BattleMode::CurrentInstance()->GetEnemyActors();
     GlobalEnemy *enemy;
     std::vector<GlobalObject *> objects;
@@ -468,8 +469,23 @@ void FinishVictoryAssistant::Initialize()
         }
     }
 
-    // ----- (3): Divide up the XP earnings by the number of players (both living and dead) and apply the penalty for any battle retries
-    _xp_earned /= _number_characters;
+    // Divide up the XP earnings by the number of players (only living ones)
+    if (alive_characters_number > 0)
+        _xp_earned /= alive_characters_number;
+    else
+        _xp_earned /= 4; // Should never happen.
+
+    // Compute the raw fighting XP bonus for each characters (20% of character's XP)
+    for(uint32 i = 0; i < _characters.size() && i < 4; ++i) {
+        if (_characters[i]->HasEquipment()) {
+            _raw_xp_won[i] = false;
+            _raw_xp_given[i] = true;
+        }
+        else {
+            _raw_xp_won[i] = true;
+            _raw_xp_given[i] = false;
+        }
+    }
 
     _CreateCharacterGUIObjects();
     _CreateObjectList();
@@ -506,7 +522,7 @@ void FinishVictoryAssistant::Draw()
 
     if(_state == FINISH_VICTORY_GROWTH) {
         _header_growth.Draw();
-        for(uint32 i = 0; i < _number_characters; i++) {
+        for(uint32 i = 0; i < _characters_number; ++i) {
             _character_window[i].Draw();
             _DrawGrowth(i);
         }
@@ -537,11 +553,11 @@ void FinishVictoryAssistant::_SetHeaderText()
 
 void FinishVictoryAssistant::_CreateCharacterGUIObjects()
 {
-    // ----- (1): Create the character windows. The lowest one does not have its lower border removed
+    // Create the character windows. The lowest one does not have its lower border removed
     float next_ypos = CHAR_WINDOW_YPOS;
-    for(uint32 i = 0; i < _number_characters; i++) {
+    for(uint32 i = 0; i < _characters_number; ++i) {
         _number_character_windows_created++;
-        if((i + 1) >= _number_characters) {
+        if((i + 1) >= _characters_number) {
             _character_window[i].Create(CHAR_WINDOW_WIDTH, CHAR_WINDOW_HEIGHT);
         } else {
             _character_window[i].Create(CHAR_WINDOW_WIDTH, CHAR_WINDOW_HEIGHT, ~VIDEO_MENU_EDGE_BOTTOM, VIDEO_MENU_EDGE_BOTTOM);
@@ -553,16 +569,16 @@ void FinishVictoryAssistant::_CreateCharacterGUIObjects()
         next_ypos += CHAR_WINDOW_HEIGHT;
     }
 
-    // ----- (2): Construct GUI objects that will fill each character window
-    for(uint32 i = 0; i < _number_characters; i++) {
+    // Construct GUI objects that will fill each character window
+    for(uint32 i = 0; i < _characters_number; ++i) {
         _growth_list[i].SetOwner(&_character_window[i]);
-        _growth_list[i].SetPosition(330.0f, 15.0f);
-        _growth_list[i].SetDimensions(200.0f, 100.0f, 4, 4, 4, 4);
+        _growth_list[i].SetPosition(350.0f, 15.0f);
+        _growth_list[i].SetDimensions(180.0f, 70.0f, 4, 4, 4, 4);
         _growth_list[i].SetTextStyle(TextStyle("text20", Color::white, VIDEO_TEXT_SHADOW_DARK));
         _growth_list[i].SetAlignment(VIDEO_X_LEFT, VIDEO_Y_TOP);
         _growth_list[i].SetOptionAlignment(VIDEO_X_RIGHT, VIDEO_Y_CENTER);
         _growth_list[i].SetCursorState(VIDEO_CURSOR_STATE_HIDDEN);
-        for(uint32 j = 0; j < 16; j ++) {
+        for(uint32 j = 0; j < 16; ++j) {
             _growth_list[i].AddOption();
         }
 
@@ -577,7 +593,7 @@ void FinishVictoryAssistant::_CreateCharacterGUIObjects()
 
         _xp_text[i].SetOwner(&_character_window[i]);
         _xp_text[i].SetPosition(130.0f, 30.0f);
-        _xp_text[i].SetDimensions(200.0f, 40.0f);
+        _xp_text[i].SetDimensions(200.0f, 50.0f);
         _xp_text[i].SetAlignment(VIDEO_X_LEFT, VIDEO_Y_TOP);
         _xp_text[i].SetTextAlignment(VIDEO_X_LEFT, VIDEO_Y_CENTER);
         _xp_text[i].SetDisplaySpeed(30);
@@ -597,7 +613,7 @@ void FinishVictoryAssistant::_CreateCharacterGUIObjects()
         }
 
         _skill_text[i].SetOwner(&_character_window[i]);
-        _skill_text[i].SetPosition(130.0f, 50.0f);
+        _skill_text[i].SetPosition(130.0f, 65.0f);
         _skill_text[i].SetDimensions(200.0f, 40.0f);
         _skill_text[i].SetAlignment(VIDEO_X_LEFT, VIDEO_Y_TOP);
         _skill_text[i].SetTextAlignment(VIDEO_X_LEFT, VIDEO_Y_CENTER);
@@ -611,7 +627,7 @@ void FinishVictoryAssistant::_CreateCharacterGUIObjects()
 
 void FinishVictoryAssistant::_CreateObjectList()
 {
-    for(std::map<hoa_global::GlobalObject *, int32>::iterator i = _objects_dropped.begin(); i != _objects_dropped.end(); i++) {
+    for(std::map<vt_global::GlobalObject *, int32>::iterator i = _objects_dropped.begin(); i != _objects_dropped.end(); i++) {
         GlobalObject *obj = i->first;
         _object_list.AddOption(MakeUnicodeString("<" + obj->GetIconImage().GetFilename() + "><30>")
                                + obj->GetName() + MakeUnicodeString("<R>x" + NumberToString(i->second)));
@@ -650,7 +666,7 @@ void FinishVictoryAssistant::_UpdateGrowth()
     // The amount of XP to add to each character this update cycle
     uint32 xp_to_add = 0;
 
-    // ---------- (1): Process confirm press inputs.
+    // Process confirm press inputs.
     if(InputManager->ConfirmPress()) {
         // Begin counting out XP earned
         if(!_begin_counting) {
@@ -671,7 +687,7 @@ void FinishVictoryAssistant::_UpdateGrowth()
     if(!_begin_counting || (_xp_earned == 0))
         return;
 
-    // ---------- (2): Update the timer and determine how much XP to add if the time has been reached
+    // Update the timer and determine how much XP to add if the time has been reached
     // We don't want to modify the XP to add if a confirm event occurred in step (1)
     if(xp_to_add == 0) {
         time_counter += SystemManager->GetUpdateTime();
@@ -691,25 +707,38 @@ void FinishVictoryAssistant::_UpdateGrowth()
     }
 
     // If there is no XP to add this update cycle, there is nothing left for us to do
-    if(xp_to_add == 0) {
+    if(xp_to_add == 0)
         return;
-    }
 
-    // ---------- (3): Add the XP amount to the characters appropriately
+    // Add the XP amount to the characters appropriately
     std::deque<BattleCharacter *>& battle_characters = BattleMode::CurrentInstance()->GetCharacterActors();
     // Tell whether the character can receive XP
     bool level_maxed_out = false;
-    for(uint32 i = 0; i < _number_characters; ++i) {
+    for(uint32 i = 0; i < _characters_number; ++i) {
         // Don't add experience points to dead characters
-        if(battle_characters[i]->IsAlive() == false) {
+        if(!battle_characters[i]->IsAlive())
             continue;
-        }
 
         // Don't permit to earn XP when the maximum level has been reached.
         if(battle_characters[i]->GetExperienceLevel() >= GlobalManager->GetMaxExperienceLevel())
             level_maxed_out = true;
 
-        if(!level_maxed_out && _characters[i]->AddExperiencePoints(xp_to_add) == true) {
+        uint32 xp_added = xp_to_add;
+        // Add the raw bonus when not given yet (+20% XP)
+        if (_raw_xp_given[i] == false) {
+            if (_xp_earned > 100) {
+                xp_added += (xp_to_add / 5);
+            }
+            else {
+                // When giving one xp point at a time,
+                // we give all the rest of the raw bonus and set it as done.
+                xp_added += _xp_earned / 5;
+                _raw_xp_given[i] = true;
+            }
+
+        }
+
+        if(!level_maxed_out && _characters[i]->AddExperiencePoints(xp_added) == true) {
             _character_growths[i].UpdateGrowthData();
             // Only add text for the stats that experienced growth
             uint32 line = 0;
@@ -766,7 +795,7 @@ void FinishVictoryAssistant::_UpdateGrowth()
             if(_character_growths[i].skills_learned.empty() == false) {
                 // TODO: this currently only shows the first skill learned. We need this interface to support showing multiple
                 // skills that were learned for each character
-                _skill_text[i].SetDisplayText(UTranslate("New Skill Learned:\n   ") + _character_growths[i].skills_learned[0]->GetName());
+                _skill_text[i].SetDisplayText(UTranslate("New Skill Learned:\n") + _character_growths[i].skills_learned[0]->GetName());
             }
         }
 
@@ -777,6 +806,8 @@ void FinishVictoryAssistant::_UpdateGrowth()
         } else {
             level_text = UTranslate("Level: ") + MakeUnicodeString(NumberToString(_characters[i]->GetExperienceLevel()));
             xp_text = UTranslate("XP left: ") + MakeUnicodeString(NumberToString(_characters[i]->GetExperienceForNextLevel()));
+            if (_raw_xp_won[i])
+                xp_text += UTranslate(" (+20%)");
         }
 
         _level_text[i].SetDisplayText(level_text);
@@ -936,7 +967,7 @@ void FinishSupervisor::Update()
                 break;
             case DEFEAT_OPTION_END:
                 ModeManager->PopAll();
-                ModeManager->Push(new hoa_boot::BootMode(), false, true);
+                ModeManager->Push(new vt_boot::BootMode(), false, true);
                 break;
             default:
                 IF_PRINT_WARNING(BATTLE_DEBUG)
@@ -963,4 +994,4 @@ void FinishSupervisor::Draw()
 
 } // namespace private_battle
 
-} // namespace hoa_battle
+} // namespace vt_battle

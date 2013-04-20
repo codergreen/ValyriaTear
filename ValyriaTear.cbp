@@ -22,7 +22,7 @@
 					<Add option="-DWIN32" />
 					<Add option="-D_DEBUG" />
 					<Add option="-D_WINDOWS" />
-					<Add option="-DDEBUG_MENU" />
+					<Add option="-DDEBUG_FEATURES" />
 					<Add directory="valyriatear-win32-depends/include" />
 					<Add directory="valyriatear-win32-depends/include/AL" />
 					<Add directory="valyriatear-win32-depends/include/boost" />
@@ -90,6 +90,7 @@
 					<Add library="Lua51" />
 					<Add library="libintl" />
 					<Add library="libiconv2" />
+					<Add library="SDL_image" />
 					<Add directory="valyriatear-win32-depends/lib" />
 				</Linker>
 			</Target>
@@ -262,7 +263,6 @@
 		<Unit filename="src/common/gui/option.h" />
 		<Unit filename="src/common/gui/textbox.cpp" />
 		<Unit filename="src/common/gui/textbox.h" />
-		<Unit filename="src/defs.h" />
 		<Unit filename="src/engine/audio/audio.cpp" />
 		<Unit filename="src/engine/audio/audio.h" />
 		<Unit filename="src/engine/audio/audio_descriptor.cpp" />
@@ -311,7 +311,6 @@
 		<Unit filename="src/engine/video/particle_system.cpp" />
 		<Unit filename="src/engine/video/particle_system.h" />
 		<Unit filename="src/engine/video/screen_rect.h" />
-		<Unit filename="src/engine/video/shake.cpp" />
 		<Unit filename="src/engine/video/shake.h" />
 		<Unit filename="src/engine/video/text.cpp" />
 		<Unit filename="src/engine/video/text.h" />
@@ -445,12 +444,14 @@
 		<Unit filename="src/modes/boot/boot.h" />
 		<Unit filename="src/modes/boot/boot_menu.cpp" />
 		<Unit filename="src/modes/boot/boot_menu.h" />
-		<Unit filename="src/modes/map/map.cpp" />
-		<Unit filename="src/modes/map/map.h" />
 		<Unit filename="src/modes/map/map_dialogue.cpp" />
 		<Unit filename="src/modes/map/map_dialogue.h" />
 		<Unit filename="src/modes/map/map_events.cpp" />
 		<Unit filename="src/modes/map/map_events.h" />
+		<Unit filename="src/modes/map/map_minimap.cpp" />
+		<Unit filename="src/modes/map/map_minimap.h" />
+		<Unit filename="src/modes/map/map_mode.cpp" />
+		<Unit filename="src/modes/map/map_mode.h" />
 		<Unit filename="src/modes/map/map_objects.cpp" />
 		<Unit filename="src/modes/map/map_objects.h" />
 		<Unit filename="src/modes/map/map_sprites.cpp" />
@@ -474,8 +475,6 @@
 		<Unit filename="src/modes/pause.h" />
 		<Unit filename="src/modes/save/save_mode.cpp" />
 		<Unit filename="src/modes/save/save_mode.h" />
-		<Unit filename="src/modes/scene.cpp" />
-		<Unit filename="src/modes/scene.h" />
 		<Unit filename="src/modes/shop/shop.cpp" />
 		<Unit filename="src/modes/shop/shop.h" />
 		<Unit filename="src/modes/shop/shop_buy.cpp" />

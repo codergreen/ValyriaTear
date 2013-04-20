@@ -1,5 +1,6 @@
 ////////////////////////////////////////////////////////////////////////////////
-//            Copyright (C) 2004-2010 by The Allacrost Project
+//            Copyright (C) 2004-2011 by The Allacrost Project
+//            Copyright (C) 2012-2013 by Bertram (Valyria Tear)
 //                         All Rights Reserved
 //
 // This code is licensed under the GNU GPL version 2. It is free software and
@@ -12,6 +13,7 @@
 *** \author  Viljami Korhonen, mindflayer@allacrost.org
 *** \author  Andy Gardner, chopperdave@allacrost.org
 *** \author  Tyler Olsen, roots@allacrost.org
+*** \author  Yohann Ferreira, yohann ferreira orange fr
 *** \brief   Source file for actions that occur in battles.
 *** ***************************************************************************/
 
@@ -25,15 +27,14 @@
 #include "modes/battle/battle_actors.h"
 #include "modes/battle/battle_utils.h"
 
-using namespace hoa_utils;
-using namespace hoa_audio;
-using namespace hoa_video;
-using namespace hoa_input;
-using namespace hoa_system;
-using namespace hoa_global;
-using namespace hoa_script;
+using namespace vt_utils;
+using namespace vt_audio;
+using namespace vt_video;
+using namespace vt_system;
+using namespace vt_global;
+using namespace vt_script;
 
-namespace hoa_battle
+namespace vt_battle
 {
 
 namespace private_battle
@@ -79,6 +80,10 @@ SkillAction::SkillAction(BattleActor *actor, BattleTarget target, GlobalSkill *s
 
     if(animation_script_file.empty())
         return;
+
+    // Clears out old script data
+    std::string tablespace = ScriptEngine::GetTableSpace(animation_script_file);
+    ScriptManager->DropGlobalTable(tablespace);
 
     ReadScriptDescriptor anim_script;
     if(!anim_script.OpenFile(animation_script_file)) {
@@ -327,4 +332,4 @@ uint32 ItemAction::GetCoolDownTime() const
 
 } // namespace private_battle
 
-} // namespace hoa_battle
+} // namespace vt_battle

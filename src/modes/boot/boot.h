@@ -1,5 +1,6 @@
 ///////////////////////////////////////////////////////////////////////////////
-//            Copyright (C) 2004-2010 by The Allacrost Project
+//            Copyright (C) 2004-2011 by The Allacrost Project
+//            Copyright (C) 2012-2013 by Bertram (Valyria Tear)
 //                         All Rights Reserved
 //
 // This code is licensed under the GNU GPL version 2. It is free software
@@ -10,6 +11,7 @@
 /** ****************************************************************************
 *** \file    boot.h
 *** \author  Viljami Korhonen, mindflayer@allacrost.org
+*** \author  Yohann Ferreira, yohann ferreira orange fr
 *** \brief   Header file for boot mode interface.
 ***
 *** This code handles the game event processing and frame drawing when the user
@@ -28,7 +30,7 @@
 #include "boot_menu.h"
 
 //! \brief All calls to boot mode are wrapped in this namespace.
-namespace hoa_boot
+namespace vt_boot
 {
 
 //! \brief Various states that boot mode may be in
@@ -37,7 +39,7 @@ enum BOOT_STATE {
     BOOT_STATE_MENU    = 1
 };
 
-//! \brief Determines whether the code in the hoa_boot namespace should print debug statements or not.
+//! \brief Determines whether the code in the vt_boot namespace should print debug statements or not.
 extern bool BOOT_DEBUG;
 
 //! \brief An internal namespace to be used only within the boot code. Don't use this namespace anywhere else!
@@ -85,7 +87,7 @@ enum WAIT_FOR {
 *** to somewhere in src/common and appropriately renamed, or BootMode should implement
 *** its own version of this class and not include "menu_views.h" anywhere
 *** ***************************************************************************/
-class BootMode : public hoa_mode_manager::GameMode
+class BootMode : public vt_mode_manager::GameMode
 {
 public:
     BootMode();
@@ -136,13 +138,16 @@ private:
     std::vector<std::string> _po_files;
 
     //! \brief Rendered text of the release version number
-    hoa_video::TextImage _version_text;
+    vt_video::TextImage _version_text;
 
     //! \brief A simple menu window where the various options menus are displayed
-    hoa_gui::MenuWindow _options_window;
+    vt_gui::MenuWindow _options_window;
 
     //! \brief Pointer to the currently active boot menu object
     private_boot::BootMenu *_active_menu;
+
+    //! \brief Keeps in memory whether this is the first app run ever.
+    bool _first_run;
 
     /** \name Various menus available in boot mode
     *** The name of the menu objects is rather self explanatory. There are a number of methods in
@@ -176,7 +181,17 @@ private:
     void (BootMode::*_joy_axis_setting_function)(int8 axis);
 
     //! \brief Window display message for "select a key"
-    hoa_menu::MessageWindow _message_window;
+    vt_menu::MessageWindow _message_window;
+
+    //! The menu bar displayed below the main menu.
+    vt_video::StillImage _menu_bar;
+    float _menu_bar_alpha;
+
+    //! A text displayed a few second at startup to remind the player about the keys to use.
+    vt_video::TextImage _f1_help_text;
+    float _help_text_alpha;
+
+    vt_system::SystemTimer _boot_timer;
 
     // ---------- Setup and refresh methods for boot menus
 
@@ -218,7 +233,7 @@ private:
     void _OnOptions();
     void _OnQuit();
 
-#ifdef DEBUG_MENU
+#ifdef DEBUG_FEATURES
     void _DEBUG_OnBattle();
     void _DEBUG_OnMenu();
     void _DEBUG_OnShop();
@@ -275,8 +290,8 @@ private:
 
     // ---------- Helper methods not directly tied to any specific boot menu
 
-    //! \brief Tests whether the welcome window should be shown.
-    void _ShowHelpWindow();
+    //! \brief Tests whether the language selection and the welcome help window should be shown.
+    void _ShowLanguageSelectionWindow();
 
     /** \brief Shows the message window to display text that its waiting for either a joystick or keyboard event
     *** \param joystick True if the window should state its waiting for a joystick event, false for a keyboard event
@@ -365,8 +380,8 @@ private:
     void _SetPauseJoy(uint8 button);
     void _SetQuitJoy(uint8 button);
     //@}
-}; // class BootMode : public hoa_mode_manager::GameMode
+}; // class BootMode : public vt_mode_manager::GameMode
 
-} // namespace hoa_boot
+} // namespace vt_boot
 
 #endif // __BOOT_HEADER__

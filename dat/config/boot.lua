@@ -23,9 +23,6 @@ local crystal_shadow_id = {};
 local satellite_id = {};
 local satellite_shadow_id = {};
 local flare_id = {};
-local menu_bar_id = {};
-
-local f1_help_text = {};
 
 -- Init all the needed variables
 function Initialize(boot_instance)
@@ -45,16 +42,13 @@ function Initialize(boot_instance)
 	satellite_id = Script:AddImage("img/backdrops/boot/satellite.png", 34, 34);
 	satellite_shadow_id = Script:AddImage("img/backdrops/boot/satellite_shadow.png", 48, 32);
 	flare_id = Script:AddImage("img/backdrops/boot/flare.png", 256, 256);
-	menu_bar_id = Script:AddImage("img/menus/battle_bottom_menu.png", 1024, 128);
 
 	-- Init the timer
-	animation_timer = hoa_system.SystemTimer(7000, 0);
-    
-    f1_help_text = hoa_system.Translate("Press '") .. InputManager:GetHelpKeyName() .. hoa_system.Translate("' to get to know about the game keys.");
+	animation_timer = vt_system.SystemTimer(7000, 0);
 end
 
 function Reset()
-	if (Boot:GetState() == hoa_boot.BootMode.BOOT_STATE_MENU) then
+	if (Boot:GetState() == vt_boot.BootMode.BOOT_STATE_MENU) then
 		AudioManager:PlayMusic("mus/Soliloquy_1-OGA-mat-pablo.ogg");
 	end
 end
@@ -62,7 +56,6 @@ end
 -- The image alpha channel values
 local logo_alpha = 0.0;
 local bckgrnd_alpha = 0.0;
-local menu_bar_alpha = 0.0;
 
 -- cloud field members
 local x_positions1 = { -110.0, 0.0, 110.0, 220.0 , 330.0, 440.0, 550.0, 660.0, 770.0, 880.0, 990.0};
@@ -215,10 +208,6 @@ end
 
 local music_started = false;
 local snow_started = false;
--- Use to display the key help after a few seconds
-local f1_time_counter = 0.0;
-local f1_text_alpha = 0.0;
-
 
 -- Update the animation
 function Update()
@@ -227,13 +216,13 @@ function Update()
 
 	UpdateBackgroundAnimation();
 
-	if (Boot:GetState() == hoa_boot.BootMode.BOOT_STATE_INTRO) then
+	if (Boot:GetState() == vt_boot.BootMode.BOOT_STATE_INTRO) then
 		-- Start the timer
 		if (animation_timer:IsInitial() == true and animation_timer:IsRunning() ~= true) then
 			animation_timer:Run();
 		elseif (animation_timer:IsFinished() == true) then
 			-- Show the menu once the presentation is done
-			Boot:ChangeState(hoa_boot.BootMode.BOOT_STATE_MENU);
+			Boot:ChangeState(vt_boot.BootMode.BOOT_STATE_MENU);
 		end
 
 		-- Update the starting animation
@@ -251,31 +240,11 @@ function Update()
 
 	-- Update the menu bar alpha in menu mode.
 
-	if (Boot:GetState() == hoa_boot.BootMode.BOOT_STATE_MENU) then
-		local time_expired = SystemManager:GetUpdateTime();
-		if (menu_bar_alpha < 0.6) then
-			menu_bar_alpha = menu_bar_alpha + 0.001 * time_expired
-
-			if menu_bar_alpha >= 0.6 then menu_bar_alpha = 0.6 end
-		end
-
+	if (Boot:GetState() == vt_boot.BootMode.BOOT_STATE_MENU) then
 		if (snow_started == false) then
 			Boot:GetParticleManager():AddParticleEffect("dat/effects/particles/snow.lua", 512.0, 384.0);
 			snow_started = true;
 		end
-
-        if (f1_time_counter < 14000.0) then
-            f1_time_counter = f1_time_counter + time_expired;
-            if (f1_time_counter < 4000.0) then
-                -- nothing
-            elseif (f1_time_counter >= 4000.0 and f1_time_counter < 12000.0) then
-                f1_text_alpha = f1_text_alpha + 0.001 * time_expired;
-                if (f1_text_alpha > 1.0) then f1_text_alpha = 1.0; end
-            elseif (f1_time_counter >= 12000.0 and f1_time_counter < 14000.0) then
-                f1_text_alpha = f1_text_alpha - 0.001 * time_expired;
-                if (f1_text_alpha < 0.0) then f1_text_alpha = 0.0; end
-            end
-        end
 	end
 end
 
@@ -285,14 +254,14 @@ function DrawCloudFieldLine(x_positions, y_position)
 	for _,v in pairs(x_positions) do
 		Script:DrawImage(cloud_field_id,
 			v, y_position,
-			hoa_video.Color(1.0, 1.0, 1.0, 0.6 * bckgrnd_alpha));
+			vt_video.Color(1.0, 1.0, 1.0, 0.6 * bckgrnd_alpha));
 	end
 end
 
 
 function DrawBackground()
 	-- The background image
-	Script:DrawImage(bckgrnd_id, 0.0, 0.0, hoa_video.Color(1.0, 1.0, 1.0, bckgrnd_alpha));
+	Script:DrawImage(bckgrnd_id, 0.0, 0.0, vt_video.Color(1.0, 1.0, 1.0, bckgrnd_alpha));
 
 	-- The passing clouds
 	DrawCloudFieldLine(x_positions1, y_position1);
@@ -306,87 +275,80 @@ end
 
 function DrawPostEffects()
 	-- front mist + fog
-	Script:DrawImage(mist_id, 0.0, 0.0, hoa_video.Color(1.0, 1.0, 1.0, bckgrnd_alpha * 0.6));
-	Script:DrawImage(fog_id, 0.0, 0.0, hoa_video.Color(1.0, 1.0, 1.0, bckgrnd_alpha * 0.8));
+	Script:DrawImage(mist_id, 0.0, 0.0, vt_video.Color(1.0, 1.0, 1.0, bckgrnd_alpha * 0.6));
+	Script:DrawImage(fog_id, 0.0, 0.0, vt_video.Color(1.0, 1.0, 1.0, bckgrnd_alpha * 0.8));
 
 	-- satellite behind
 	if (sat1_behind) then
 		Script:DrawImage(satellite_shadow_id,
 			640.0 + sat1_decay + (sat1_x_position / 2.0), 438.0 + (sat1_x_position / 3.0),
-			hoa_video.Color(1.0, 1.0, 1.0, bckgrnd_alpha * 0.3));
+			vt_video.Color(1.0, 1.0, 1.0, bckgrnd_alpha * 0.3));
 
 		Script:DrawImage(satellite_id,
 			448.0 + sat1_x_position, 368.0 - sat1_decay,
-			hoa_video.Color(1.0, 1.0, 1.0, bckgrnd_alpha * 0.7));
+			vt_video.Color(1.0, 1.0, 1.0, bckgrnd_alpha * 0.7));
 	end
 	if (sat2_behind) then
 		Script:DrawImage(satellite_shadow_id,
 			640.0 + sat2_decay + (sat2_x_position / 2.0), 438.0 + (sat2_x_position / 3.0),
-			hoa_video.Color(1.0, 1.0, 1.0, bckgrnd_alpha * 0.3));
+			vt_video.Color(1.0, 1.0, 1.0, bckgrnd_alpha * 0.3));
 
 		Script:DrawImage(satellite_id,
 			448.0 + sat2_x_position, 368.0 - sat2_decay,
-			hoa_video.Color(1.0, 1.0, 1.0, bckgrnd_alpha * 0.7));
+			vt_video.Color(1.0, 1.0, 1.0, bckgrnd_alpha * 0.7));
 	end
 	if (sat3_behind) then
 		Script:DrawImage(satellite_shadow_id,
 			640.0 + sat3_decay + (sat3_x_position / 2.0), 438.0 + (sat3_x_position / 3.0),
-			hoa_video.Color(1.0, 1.0, 1.0, bckgrnd_alpha * 0.3));
+			vt_video.Color(1.0, 1.0, 1.0, bckgrnd_alpha * 0.3));
 
 		Script:DrawImage(satellite_id,
 			448.0 + sat3_x_position, 368.0 - sat3_decay,
-			hoa_video.Color(1.0, 1.0, 1.0, bckgrnd_alpha * 0.7));
+			vt_video.Color(1.0, 1.0, 1.0, bckgrnd_alpha * 0.7));
 	end
 
 	-- Crystal
 	Script:DrawImage(crystal_shadow_id,
 		498.0 + crystal_decay, 438.0,
-		hoa_video.Color(1.0, 1.0, 1.0, bckgrnd_alpha * 0.3));
+		vt_video.Color(1.0, 1.0, 1.0, bckgrnd_alpha * 0.3));
 
 	Script:DrawImage(crystal_id,
 		448.0, 368.0 - crystal_decay,
-		hoa_video.Color(1.0, 1.0, 1.0, bckgrnd_alpha * 0.7));
+		vt_video.Color(1.0, 1.0, 1.0, bckgrnd_alpha * 0.7));
 
 	Script:DrawImage(flare_id,
 		384.0, 328.0 - crystal_decay,
-		hoa_video.Color(1.0, 1.0, 1.0, bckgrnd_alpha * 0.6));
+		vt_video.Color(1.0, 1.0, 1.0, bckgrnd_alpha * 0.6));
 
 	-- satellite in front
 	if (sat1_behind == false) then
 		Script:DrawImage(satellite_shadow_id,
 			640.0 + sat1_decay + (sat1_x_position / 2.0), 438.0 + (sat1_x_position / 3.0),
-			hoa_video.Color(1.0, 1.0, 1.0, bckgrnd_alpha * 0.3));
+			vt_video.Color(1.0, 1.0, 1.0, bckgrnd_alpha * 0.3));
 
 		Script:DrawImage(satellite_id,
 			448.0 + sat1_x_position, 368.0 - sat1_decay,
-			hoa_video.Color(1.0, 1.0, 1.0, bckgrnd_alpha * 0.7));
+			vt_video.Color(1.0, 1.0, 1.0, bckgrnd_alpha * 0.7));
 	end
 	if (sat2_behind == false) then
 		Script:DrawImage(satellite_shadow_id,
 			640.0 + sat2_decay + (sat2_x_position / 2.0), 438.0 + (sat2_x_position / 3.0),
-			hoa_video.Color(1.0, 1.0, 1.0, bckgrnd_alpha * 0.3));
+			vt_video.Color(1.0, 1.0, 1.0, bckgrnd_alpha * 0.3));
 
 		Script:DrawImage(satellite_id,
 			448.0 + sat2_x_position, 368.0 - sat2_decay,
-			hoa_video.Color(1.0, 1.0, 1.0, bckgrnd_alpha * 0.7));
+			vt_video.Color(1.0, 1.0, 1.0, bckgrnd_alpha * 0.7));
 	end
 	if (sat3_behind == false) then
 		Script:DrawImage(satellite_shadow_id,
 			640.0 + sat3_decay + (sat3_x_position / 2.0), 438.0 + (sat3_x_position / 3.0),
-			hoa_video.Color(1.0, 1.0, 1.0, bckgrnd_alpha * 0.3));
+			vt_video.Color(1.0, 1.0, 1.0, bckgrnd_alpha * 0.3));
 
 		Script:DrawImage(satellite_id,
 			448.0 + sat3_x_position, 368.0 - sat3_decay,
-			hoa_video.Color(1.0, 1.0, 1.0, bckgrnd_alpha * 0.7));
-	end
-
-	-- A dark bar used to make the menu more visible
-	if (Boot:GetState() == hoa_boot.BootMode.BOOT_STATE_MENU) then
-		Script:DrawImage(menu_bar_id, 0.0, 640.0, hoa_video.Color(1.0, 1.0, 1.0, menu_bar_alpha));
-
-        VideoManager:DrawText(f1_help_text, 312.0, 703.0, hoa_video.Color(1.0, 1.0, 1.0, f1_text_alpha));
+			vt_video.Color(1.0, 1.0, 1.0, bckgrnd_alpha * 0.7));
 	end
 
 	-- Logo
-	Script:DrawImage(logo_id, 198.0, 18.0, hoa_video.Color(1.0, 1.0, 1.0, logo_alpha));
+	Script:DrawImage(logo_id, 198.0, 18.0, vt_video.Color(1.0, 1.0, 1.0, logo_alpha));
 end

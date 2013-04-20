@@ -1,5 +1,5 @@
 ///////////////////////////////////////////////////////////////////////////////
-//            Copyright (C) 2012 by Bertram (Yohann Ferreira)
+//            Copyright (C) 2012-2013 by Bertram (Valyria Tear)
 //                         All Rights Reserved
 //
 // This code is licensed under the GNU GPL version 2. It is free software
@@ -9,18 +9,18 @@
 
 /** ****************************************************************************
 *** \file    script_supervisor.cpp
-*** \author Yohann Ferreira, yohann ferreira orange fre
-*** \brief  Source file for managing scriptable animated effects for any game mode.
+*** \author  Yohann Ferreira, yohann ferreira orange fr
+*** \brief   Source file for managing scriptable animated effects for any game mode.
 *** ***************************************************************************/
 
 #include "engine/script_supervisor.h"
 
 #include "engine/mode_manager.h"
 
-using namespace hoa_video;
-using namespace hoa_script;
+using namespace vt_video;
+using namespace vt_script;
 
-void ScriptSupervisor::Initialize(hoa_mode_manager::GameMode *gm)
+void ScriptSupervisor::Initialize(vt_mode_manager::GameMode *gm)
 {
     // Open every possible scene script files registered and process them.
     for(uint32 i = 0; i < _script_filenames.size(); ++i) {
@@ -58,7 +58,7 @@ void ScriptSupervisor::Initialize(hoa_mode_manager::GameMode *gm)
     }
 }
 
-void ScriptSupervisor::SetDrawFlag(hoa_video::VIDEO_DRAW_FLAGS draw_flag)
+void ScriptSupervisor::SetDrawFlag(vt_video::VIDEO_DRAW_FLAGS draw_flag)
 {
     VideoManager->SetDrawFlags(draw_flag, 0);
 }

@@ -1,5 +1,6 @@
 ///////////////////////////////////////////////////////////////////////////////
-//            Copyright (C) 2004-2010 by The Allacrost Project
+//            Copyright (C) 2004-2011 by The Allacrost Project
+//            Copyright (C) 2012-2013 by Bertram (Valyria Tear)
 //                         All Rights Reserved
 //
 // This code is licensed under the GNU GPL version 2. It is free software
@@ -10,7 +11,8 @@
 /** ****************************************************************************
 *** \file    script_write.cpp
 *** \author  Daniel Steuernol - steu@allacrost.org,
-***          Tyler Olsen - roots@allacrost.org
+*** \author  Tyler Olsen - roots@allacrost.org
+*** \author  Yohann Ferreira, yohann ferreira orange fr
 *** \brief   Source file for the WriteScriptDescriptor class.
 *** ***************************************************************************/
 
@@ -21,9 +23,9 @@
 #include "script.h"
 #include "script_write.h"
 
-using namespace hoa_utils;
+using namespace vt_utils;
 
-namespace hoa_script
+namespace vt_script
 {
 
 WriteScriptDescriptor::~WriteScriptDescriptor()
@@ -469,4 +471,4 @@ void WriteScriptDescriptor::_WriteTablePath()
     }
 }
 
-} // namespace hoa_script
+} // namespace vt_script

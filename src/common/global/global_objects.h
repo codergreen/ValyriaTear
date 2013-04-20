@@ -1,5 +1,6 @@
 ////////////////////////////////////////////////////////////////////////////////
-//            Copyright (C) 2004-2010 by The Allacrost Project
+//            Copyright (C) 2004-2011 by The Allacrost Project
+//            Copyright (C) 2012-2013 by Bertram (Valyria Tear)
 //                         All Rights Reserved
 //
 // This code is licensed under the GNU GPL version 2. It is free software
@@ -10,6 +11,7 @@
 /** ****************************************************************************
 *** \file    global_objects.h
 *** \author  Tyler Olsen, roots@allacrost.org
+*** \author  Yohann Ferreira, yohann ferreira orange fr
 *** \brief   Header file for global game objects
 ***
 *** This file contains several representations of inventory "objects" used
@@ -24,8 +26,14 @@
 #include "engine/video/image.h"
 #include "engine/script/script.h"
 
-namespace hoa_global
+namespace vt_script {
+class ReadScriptDescriptor;
+}
+
+namespace vt_global
 {
+
+class GlobalShard;
 
 /** ****************************************************************************
 *** \brief An abstract base class for representing a game object
@@ -62,6 +70,7 @@ public:
 
     GlobalObject(uint32 id, uint32 count = 1) :
         _id(id),
+        _is_key_item(false),
         _count(count),
         _price(0),
         _trade_price(0)
@@ -73,6 +82,11 @@ public:
     //! \brief Returns true if the object is properly initialized and ready to be used
     bool IsValid() const {
         return (_id != 0);
+    }
+
+    //! \brief Returns true if the object is properly initialized and ready to be used
+    bool IsKeyItem() const {
+        return _is_key_item;
     }
 
     /** \brief Purely virtual function used to distinguish between object types
@@ -103,11 +117,11 @@ public:
         return _id;
     }
 
-    const hoa_utils::ustring &GetName() const {
+    const vt_utils::ustring &GetName() const {
         return _name;
     }
 
-    const hoa_utils::ustring &GetDescription() const {
+    const vt_utils::ustring &GetDescription() const {
         return _description;
     }
 
@@ -131,7 +145,7 @@ public:
         return _trade_conditions;
     }
 
-    const hoa_video::StillImage &GetIconImage() const {
+    const vt_video::StillImage &GetIconImage() const {
         return _icon_image;
     }
 
@@ -151,10 +165,13 @@ protected:
     uint32 _id;
 
     //! \brief The name of the object as it would be displayed on a screen
-    hoa_utils::ustring _name;
+    vt_utils::ustring _name;
 
     //! \brief A short description of the item to display on the screen
-    hoa_utils::ustring _description;
+    vt_utils::ustring _description;
+
+    //! \brief Tells whether an item is a key item, preventing from being consumed or sold.
+    bool _is_key_item;
 
     //! \brief Retains how many occurences of the object are represented by this class object instance
     uint32 _count;
@@ -170,7 +187,7 @@ protected:
     std::vector<std::pair<uint32, uint32> > _trade_conditions;
 
     //! \brief A loaded icon image of the object at its original size of 60x60 pixels
-    hoa_video::StillImage _icon_image;
+    vt_video::StillImage _icon_image;
 
     /** \brief Container that holds the intensity of each type of elemental effect of the object
     *** Elements with an intensity of GLOBAL_INTENSITY_NEUTRAL indicate no elemental bonus
@@ -195,16 +212,16 @@ protected:
     *** table context prepared. This function will do nothing more but read the expected key/values of
     *** the open table in the script file and return.
     **/
-    void _LoadObjectData(hoa_script::ReadScriptDescriptor &script);
+    void _LoadObjectData(vt_script::ReadScriptDescriptor &script);
 
     //! \brief Loads elemental effects data
-    void _LoadElementalEffects(hoa_script::ReadScriptDescriptor &script);
+    void _LoadElementalEffects(vt_script::ReadScriptDescriptor &script);
 
     //! \brief Loads status effects data
-    void _LoadStatusEffects(hoa_script::ReadScriptDescriptor &script);
+    void _LoadStatusEffects(vt_script::ReadScriptDescriptor &script);
 
     //! \brief Loads trading price data
-    void _LoadTradeConditions(hoa_script::ReadScriptDescriptor &script);
+    void _LoadTradeConditions(vt_script::ReadScriptDescriptor &script);
 }; // class GlobalObject
 
 
@@ -346,6 +363,10 @@ public:
     const std::string &GetAmmoImageFile() const {
         return _ammo_image_file;
     }
+
+    //! \brief Get the animation filename corresponding to the character weapon animation
+    //! requested.
+    const std::string& GetWeaponAnimationFile(uint32 character_id, const std::string& animation_alias);
     //@}
 
 private:
@@ -363,12 +384,19 @@ private:
     **/
     uint32 _usable_by;
 
+    //! \brief The info about weapon animations for each global character.
+    //! map < character_id, map < animation alias, animation filename > >
+    std::map <uint32, std::map<std::string, std::string> > _weapon_animations;
+
     /** \brief Shard slots which may be used to place shards on the weapon
     *** Weapons may have no slots, so it is not uncommon for the size of this vector to be zero.
     *** When shard slots are available but empty (has no attached shard), the pointer at that index
     *** will be NULL.
     **/
     std::vector<GlobalShard *> _shard_slots;
+
+    //! \brief Loads the battle animations data for each character that can use the weapon.
+    void _LoadWeaponBattleAnimations(vt_script::ReadScriptDescriptor& script);
 }; // class GlobalWeapon : public GlobalObject
 
 
@@ -456,26 +484,6 @@ public:
     }
 }; // class GlobalShard : public GlobalObject
 
-
-/** ****************************************************************************
-*** \brief Represents key items found throughout the game
-***
-*** Key items are special items which can not be used directly used nor sold by
-*** the player. Their primary function is to for use in game logic. For example,
-*** a copper key may be needed to open a certain door in a dungeon. Key items
-*** have no need for further data  nor logic beyond what is provided in the
-*** GlobalObject base class is necessary for key items.
-*** ***************************************************************************/
-class GlobalKeyItem : public GlobalObject
-{
-public:
-    GlobalKeyItem(uint32 id, uint32 count = 1);
-
-    GLOBAL_OBJECT GetObjectType() const {
-        return GLOBAL_OBJECT_KEY_ITEM;
-    }
-}; // class GlobalKeyItem : public GlobalObject
-
-} // namespace hoa_global
+} // namespace vt_global
 
 #endif // __GLOBAL_OBJECTS_HEADER__

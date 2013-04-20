@@ -1,5 +1,6 @@
 ///////////////////////////////////////////////////////////////////////////////
-//            Copyright (C) 2004-2010 by The Allacrost Project
+//            Copyright (C) 2004-2011 by The Allacrost Project
+//            Copyright (C) 2012-2013 by Bertram (Valyria Tear)
 //                         All Rights Reserved
 //
 // This code is licensed under the GNU GPL version 2. It is free software
@@ -10,6 +11,7 @@
 /** ****************************************************************************
 *** \file    video.cpp
 *** \author  Raj Sharma, roos@allacrost.org
+*** \author  Yohann Ferreira, yohann ferreira orange fr
 *** \brief   Source file for video engine interface.
 *** ***************************************************************************/
 
@@ -19,12 +21,17 @@
 
 #include "engine/system.h"
 
-using namespace hoa_utils;
-using namespace hoa_video::private_video;
+// Avoid a useless dependency on the mode manager for the editor build
+#ifndef EDITOR_BUILD
+#include "engine/mode_manager.h"
+#endif
 
-template<> hoa_video::VideoEngine *Singleton<hoa_video::VideoEngine>::_singleton_reference = NULL;
+using namespace vt_utils;
+using namespace vt_video::private_video;
 
-namespace hoa_video
+template<> vt_video::VideoEngine *Singleton<vt_video::VideoEngine>::_singleton_reference = NULL;
+
+namespace vt_video
 {
 
 VideoEngine *VideoManager = NULL;
@@ -46,15 +53,6 @@ Color Color::aqua(0.0f, 1.0f, 1.0f, 1.0f);
 Color Color::blue(0.0f, 0.0f, 1.0f, 1.0f);
 Color Color::violet(0.0f, 0.0f, 1.0f, 1.0f);
 Color Color::brown(0.6f, 0.3f, 0.1f, 1.0f);
-
-
-
-float Lerp(float alpha, float initial, float final)
-{
-    return alpha * final + (1.0f - alpha) * initial;
-}
-
-
 
 void RotatePoint(float &x, float &y, float angle)
 {
@@ -113,13 +111,8 @@ VideoEngine::VideoEngine():
                                          VIDEO_STANDARD_RES_HEIGHT);
     _current_context.scissoring_enabled = false;
 
-    strcpy(_next_temp_file, "00000000");
-
     for(uint32 sample = 0; sample < FPS_SAMPLES; sample++)
         _fps_samples[sample] = 0;
-
-    // Custom fading overlay
-    _fade_overlay_img.Load("", 1.0f, 1.0f);
 }
 
 
@@ -128,7 +121,7 @@ void VideoEngine::DrawFPS()
     if(!_fps_display)
         return;
 
-    uint32 frame_time = hoa_system::SystemManager->GetUpdateTime();
+    uint32 frame_time = vt_system::SystemManager->GetUpdateTime();
     SetDrawFlags(VIDEO_X_LEFT, VIDEO_Y_BOTTOM, VIDEO_X_NOFLIP, VIDEO_Y_NOFLIP, VIDEO_BLEND, 0);
 
     // Calculate the FPS for the current frame
@@ -369,10 +362,7 @@ void VideoEngine::Clear(const Color &c)
 
 void VideoEngine::Update()
 {
-    uint32 frame_time = hoa_system::SystemManager->GetUpdateTime();
-
-    // Update shaking effect
-    _UpdateShake(frame_time);
+    uint32 frame_time = vt_system::SystemManager->GetUpdateTime();
 
     _screen_fader.Update(frame_time);
 }
@@ -425,16 +415,6 @@ bool VideoEngine::ApplySettings()
             IF_PRINT_WARNING(VIDEO_DEBUG) << "failed to delete OpenGL textures during a context change" << std::endl;
         }
 
-        // Clear GL state
-        DisableBlending();
-        DisableTexture2D();
-        DisableAlphaTest();
-        DisableStencilTest();
-        DisableScissoring();
-        DisableVertexArray();
-        DisableColorArray();
-        DisableTextureCoordArray();
-
         int32 flags = SDL_OPENGL;
 
         if(_temp_fullscreen == true) {
@@ -477,6 +457,16 @@ bool VideoEngine::ApplySettings()
                 return false;
             }
         }
+
+        // Clear GL state, after SDL_SetVideoMode() for OSX compatibility
+        DisableBlending();
+        DisableTexture2D();
+        DisableAlphaTest();
+        DisableStencilTest();
+        DisableScissoring();
+        DisableVertexArray();
+        DisableColorArray();
+        DisableTextureCoordArray();
 
         // Turn off writing to the depth buffer
         glDepthMask(GL_FALSE);
@@ -784,17 +774,7 @@ void VideoEngine::SetTransform(float matrix[16])
 
 void VideoEngine::DrawFadeEffect()
 {
-
-    // Draw a screen overlay if we are in the process of doing a custom fading
-    if(_screen_fader.ShouldUseFadeOverlay()) {
-        _fade_overlay_img.SetColor(_screen_fader.GetFadeOverlayColor());
-        SetDrawFlags(VIDEO_X_LEFT, VIDEO_Y_BOTTOM, 0);
-        SetCoordSys(0.0f, 1.0f, 0.0f, 1.0f);
-        PushState();
-        Move(0.0f, 0.0f);
-        _fade_overlay_img.Draw();
-        PopState();
-    }
+    _screen_fader.Draw();
 }
 
 
@@ -866,6 +846,76 @@ StillImage VideoEngine::CaptureScreen() throw(Exception)
     return screen_image;
 }
 
+StillImage VideoEngine::CreateImage(ImageMemory *raw_image, const std::string &image_name, bool delete_on_exist) throw(Exception)
+{
+    //the returning image
+    StillImage still_image;
+
+    //check if the raw_image pointer is valid
+    if(!raw_image)
+    {
+        throw Exception("raw_image is NULL, cannot create a StillImage", __FILE__, __LINE__, __FUNCTION__);
+        return still_image;
+    }
+
+    still_image.SetDimensions(raw_image->width, raw_image->height);
+
+    //Check to see if the image_name exists
+    if(TextureManager->_IsImageTextureRegistered(image_name))
+    {
+        //if we are allowed to delete, then we remove the texture
+        if(delete_on_exist)
+        {
+            ImageTexture* old = TextureManager->_GetImageTexture(image_name);
+            TextureManager->_UnregisterImageTexture(old);
+            if(old->RemoveReference())
+                delete old;
+        }
+        else
+        {
+            throw Exception("image already exists in texture manager", __FILE__, __LINE__, __FUNCTION__);
+            return still_image;
+        }
+    }
+
+    //create a new texture image. the next few steps are similar to CaptureImage, so in the future
+    // we may want to do a code-cleanup
+    ImageTexture *new_image = new ImageTexture(image_name, "<T>", raw_image->width, raw_image->height);
+    new_image->AddReference();
+    // Create a texture sheet of an appropriate size that can retain the capture
+    TexSheet *temp_sheet = TextureManager->_CreateTexSheet(RoundUpPow2(raw_image->width), RoundUpPow2(raw_image->height), VIDEO_TEXSHEET_ANY, false);
+    VariableTexSheet *sheet = dynamic_cast<VariableTexSheet *>(temp_sheet);
+
+    // Ensure that texture sheet creation succeeded, insert the texture image into the sheet, and copy the screen into the sheet
+    if(sheet == NULL) {
+        delete new_image;
+        throw Exception("could not create texture sheet to store still image", __FILE__, __LINE__, __FUNCTION__);
+        return still_image;
+    }
+
+    if(sheet->InsertTexture(new_image) == false)
+    {
+        TextureManager->_RemoveSheet(sheet);
+        delete new_image;
+        throw Exception("could not insert raw image into texture sheet", __FILE__, __LINE__, __FUNCTION__);
+        return still_image;
+    }
+
+    if(sheet->CopyRect(0, 0, *raw_image) == false)
+    {
+        TextureManager->_RemoveSheet(sheet);
+        delete new_image;
+        throw Exception("call to TexSheet::CopyRect() failed", __FILE__, __LINE__, __FUNCTION__);
+        still_image.Clear();
+        return still_image;
+    }
+
+    // Store the image element to the saved image (with a flipped y axis)
+    still_image._image_texture = new_image;
+    still_image._texture = new_image;
+    return still_image;
+}
+
 void VideoEngine::DrawText(const ustring &text, float x, float y, const Color &c)
 {
     Move(x, y);
@@ -873,6 +923,25 @@ void VideoEngine::DrawText(const ustring &text, float x, float y, const Color &c
     text_style.color = c;
     Text()->Draw(text, text_style);
 }
+
+// Avoid a useless dependency on the mode manager for the editor build
+#ifndef EDITOR_BUILD
+bool VideoEngine::IsScreenShaking()
+{
+    vt_mode_manager::GameMode *gm = vt_mode_manager::ModeManager->GetTop();
+
+    if (!gm)
+        return false;
+
+    vt_mode_manager::EffectSupervisor &effects = gm->GetEffectSupervisor();
+    if (!effects.IsScreenShaking())
+        return false;
+
+    // update the shaking offsets before returning
+    effects.GetShakingOffsets(_x_shake, _y_shake);
+    return true;
+}
+#endif
 
 void VideoEngine::SetGamma(float value)
 {
@@ -934,48 +1003,6 @@ void VideoEngine::MakeScreenshot(const std::string &filename)
     buffer.pixels = NULL;
 }
 
-//-----------------------------------------------------------------------------
-// _CreateTempFilename
-//-----------------------------------------------------------------------------
-
-std::string VideoEngine::_CreateTempFilename(const std::string &extension)
-{
-    // figure out the temp filename to return
-    std::string file_name = "/tmp/"APPSHORTNAME;
-    file_name += _next_temp_file;
-    file_name += extension;
-
-    // increment the 8-character temp name
-    // Note: assume that the temp name is currently set to
-    //       a valid name
-
-
-    for(int32 digit = 7; digit >= 0; --digit) {
-        ++_next_temp_file[digit];
-
-        if(_next_temp_file[digit] > 'z') {
-            if(digit == 0) {
-                IF_PRINT_WARNING(VIDEO_DEBUG)
-                        << "VIDEO ERROR: _nextTempFile went past 'zzzzzzzz'" << std::endl;
-                return file_name;
-            }
-
-            _next_temp_file[digit] = '0';
-        } else {
-            if(_next_temp_file[digit] > '9' && _next_temp_file[digit] < 'a')
-                _next_temp_file[digit] = 'a';
-
-            // if the digit did not overflow, then we don't need to carry over
-            break;
-        }
-    }
-
-    return file_name;
-}
-
-
-
-
 int32 VideoEngine::_ConvertYAlign(int32 y_align)
 {
     switch(y_align) {
@@ -990,9 +1017,6 @@ int32 VideoEngine::_ConvertYAlign(int32 y_align)
         return 0;
     }
 }
-
-
-
 
 int32 VideoEngine::_ConvertXAlign(int32 x_align)
 {
@@ -1140,4 +1164,4 @@ void VideoEngine::DrawHalo(const ImageDescriptor &id, const Color &color)
     //PopMatrix();
 }
 
-}  // namespace hoa_video
+}  // namespace vt_video

@@ -1,5 +1,6 @@
 ///////////////////////////////////////////////////////////////////////////////
-//            Copyright (C) 2004-2010 by The Allacrost Project
+//            Copyright (C) 2004-2011 by The Allacrost Project
+//            Copyright (C) 2012-2013 by Bertram (Valyria Tear)
 //                         All Rights Reserved
 //
 // This code is licensed under the GNU GPL version 2. It is free software
@@ -7,7 +8,18 @@
 // See http://www.gnu.org/copyleft/gpl.html for details.
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "defs.h"
+/** ****************************************************************************
+*** \file    shop_trade.cpp
+*** \author  Tyler Olsen, roots@allacrost.org
+*** \author  Josh Niehenke, jnskeer@gmail.com
+*** \author  Yohann Ferreira, yohann ferreira orange fr
+*** \brief   Source file for sell interface of shop mode
+*** ***************************************************************************/
+
+#include "shop_trade.h"
+
+#include "shop.h"
+
 #include "utils.h"
 
 #include "engine/audio/audio.h"
@@ -17,18 +29,15 @@
 
 #include "common/global/global.h"
 
-#include "shop.h"
-#include "shop_trade.h"
+using namespace vt_utils;
+using namespace vt_audio;
+using namespace vt_input;
+using namespace vt_system;
+using namespace vt_video;
+using namespace vt_gui;
+using namespace vt_global;
 
-using namespace hoa_utils;
-using namespace hoa_audio;
-using namespace hoa_input;
-using namespace hoa_system;
-using namespace hoa_video;
-using namespace hoa_gui;
-using namespace hoa_global;
-
-namespace hoa_shop
+namespace vt_shop
 {
 
 namespace private_shop
@@ -61,7 +70,7 @@ TradeInterface::TradeInterface() :
     _selected_name.SetStyle(TextStyle("text22"));
 
     _selected_properties.SetOwner(ShopMode::CurrentInstance()->GetBottomWindow());
-    _selected_properties.SetPosition(480.0f, 80.0f);
+    _selected_properties.SetPosition(480.0f, 70.0f);
     _selected_properties.SetDimensions(300.0f, 30.0f, 3, 1, 3, 1);
     _selected_properties.SetOptionAlignment(VIDEO_X_RIGHT, VIDEO_Y_CENTER);
     _selected_properties.SetTextStyle(TextStyle("text22"));
@@ -86,7 +95,7 @@ void TradeInterface::_UpdateAvailableTradeDealTypes()
     // Determine what types of objects the shop deals in based on the managed object list
     std::map<uint32, ShopObject *>* trade_objects = ShopMode::CurrentInstance()->GetAvailableTrade();
     for(std::map<uint32, ShopObject *>::iterator it = trade_objects->begin(); it != trade_objects->end(); ++it) {
-        hoa_global::GLOBAL_OBJECT object_type = it->second->GetObject()->GetObjectType();
+        vt_global::GLOBAL_OBJECT object_type = it->second->GetObject()->GetObjectType();
         switch(object_type) {
         case GLOBAL_OBJECT_ITEM:
             _trade_deal_types |= DEALS_ITEMS;
@@ -109,13 +118,14 @@ void TradeInterface::_UpdateAvailableTradeDealTypes()
         case GLOBAL_OBJECT_SHARD:
             _trade_deal_types |= DEALS_SHARDS;
             break;
-        case GLOBAL_OBJECT_KEY_ITEM:
-            _trade_deal_types |= DEALS_KEY_ITEMS;
-            break;
         default:
             IF_PRINT_WARNING(SHOP_DEBUG) << "unknown object type sold in shop: " << object_type << std::endl;
             break;
         }
+
+        // Also test whether this is a key item
+        if (it->second->GetObject()->IsKeyItem())
+            _trade_deal_types |= DEALS_KEY_ITEMS;
     }
 }
 
@@ -127,7 +137,7 @@ void TradeInterface::_RefreshItemCategories()
     _category_names.clear();
     ShopMedia *shop_media = ShopMode::CurrentInstance()->Media();
     std::vector<ustring>* all_category_names = shop_media->GetAllCategoryNames();
-    std::vector<StillImage>* all_category_icons = shop_media->GetAllCategoryIcons();
+    std::vector<StillImage>* all_category_icons = GlobalManager->Media().GetAllItemCategoryIcons();
 
     // Determine which categories are used in this shop and populate the true containers with that data
     _UpdateAvailableTradeDealTypes();
@@ -170,7 +180,8 @@ void TradeInterface::Reinitialize()
     }
 
     // Holds the index to the _object_data vector where the container for a specific object type is located
-    std::vector<uint32> type_index(GLOBAL_OBJECT_TOTAL, 0);
+    // The + 1 is set to reserve space for key items.
+    std::vector<uint32> type_index(GLOBAL_OBJECT_TOTAL + 1, 0);
     // Used to set the appropriate data in the type_index vector
     uint32 next_index = 0;
     // Used to do a bit-by-bit analysis of the deal_types variable
@@ -219,13 +230,14 @@ void TradeInterface::Reinitialize()
         case GLOBAL_OBJECT_SHARD:
             object_data[type_index[6]].push_back(obj);
             break;
-        case GLOBAL_OBJECT_KEY_ITEM:
-            object_data[type_index[7]].push_back(obj);
-            break;
         default:
             IF_PRINT_WARNING(SHOP_DEBUG) << "added object of unknown type: " << obj->GetObject()->GetObjectType() << std::endl;
             break;
         }
+
+        // Also test whether this is a key item.
+        if (obj->GetObject()->IsKeyItem())
+             object_data[type_index[7]].push_back(obj);
 
         // If there is an "All Wares" category, make sure the object gets added there as well
         if(_number_categories > 1) {
@@ -285,44 +297,44 @@ void TradeInterface::Update()
             _ChangeViewMode(SHOP_VIEW_MODE_INFO);
         } else if(InputManager->CancelPress()) {
             ShopMode::CurrentInstance()->ChangeState(SHOP_STATE_ROOT);
-            ShopMode::CurrentInstance()->Media()->GetSound("cancel")->Play();
+            GlobalManager->Media().PlaySound("cancel");
         }
 
         // Swap cycles through the object categories
         else if(InputManager->MenuPress() && (_number_categories > 1)) {
             if(_ChangeCategory(true) == true)
                 ShopMode::CurrentInstance()->ObjectViewer()->SetSelectedObject(_selected_object);
-            ShopMode::CurrentInstance()->Media()->GetSound("confirm")->Play();
+            GlobalManager->Media().PlaySound("confirm");
         }
 
         // Up/down changes the selected object in the current list
         else if(InputManager->UpPress()) {
             if(_ChangeSelection(false) == true) {
                 ShopMode::CurrentInstance()->ObjectViewer()->SetSelectedObject(_selected_object);
-                ShopMode::CurrentInstance()->Media()->GetSound("confirm")->Play();
+                GlobalManager->Media().PlaySound("confirm");
             }
         } else if(InputManager->DownPress()) {
             if(_ChangeSelection(true) == true) {
                 ShopMode::CurrentInstance()->ObjectViewer()->SetSelectedObject(_selected_object);
-                ShopMode::CurrentInstance()->Media()->GetSound("confirm")->Play();
+                GlobalManager->Media().PlaySound("confirm");
             }
         }
     } // if (_view_mode == SHOP_VIEW_MODE_LIST)
 
     else if(_view_mode == SHOP_VIEW_MODE_INFO) {
         if(InputManager->ConfirmPress()) {
-            _ChangeViewMode(SHOP_VIEW_MODE_LIST); //Is this needed?
+            _ChangeViewMode(SHOP_VIEW_MODE_LIST);
             ShopMode::CurrentInstance()->ChangeState(SHOP_STATE_ROOT);
             ShopMode::CurrentInstance()->CompleteTransaction();
-            ShopMode::CurrentInstance()->Media()->GetSound("confirm")->Play();
+            GlobalManager->Media().PlaySound("confirm");
             ShopMode::CurrentInstance()->ClearOrder();
             ShopMode::CurrentInstance()->ChangeState(SHOP_STATE_TRADE);
 
         }
         if(InputManager->CancelPress()) {
             _ChangeViewMode(SHOP_VIEW_MODE_LIST);
-            while(_list_displays[_current_category]->ChangeTradeQuantity(false) == true) {} //Is this dangerous or inefficient?
-            ShopMode::CurrentInstance()->Media()->GetSound("cancel")->Play();
+            while(_list_displays[_current_category]->ChangeTradeQuantity(false) == true) {}
+            GlobalManager->Media().PlaySound("cancel");
             ShopMode::CurrentInstance()->ClearOrder();
         }
 
@@ -330,15 +342,19 @@ void TradeInterface::Update()
         else if(InputManager->LeftPress()) {
             if(_list_displays[_current_category]->ChangeTradeQuantity(false) == true) {
                 ShopMode::CurrentInstance()->ObjectViewer()->UpdateCountText();
-                ShopMode::CurrentInstance()->Media()->GetSound("confirm")->Play();
+                GlobalManager->Media().PlaySound("confirm");
             } else
-                ShopMode::CurrentInstance()->Media()->GetSound("bump")->Play();
+                GlobalManager->Media().PlaySound("bump");
         } else if(InputManager->RightPress()) {
             if(_list_displays[_current_category]->ChangeTradeQuantity(true) == true) {
                 ShopMode::CurrentInstance()->ObjectViewer()->UpdateCountText();
-                ShopMode::CurrentInstance()->Media()->GetSound("confirm")->Play();
+                GlobalManager->Media().PlaySound("confirm");
             } else
-                ShopMode::CurrentInstance()->Media()->GetSound("bump")->Play();
+                GlobalManager->Media().PlaySound("bump");
+        } else if(InputManager->UpPress()) {
+            ShopMode::CurrentInstance()->ObjectViewer()->ScrollUpTradeConditions();
+        } else if(InputManager->DownPress()) {
+            ShopMode::CurrentInstance()->ObjectViewer()->ScrollDownTradeConditions();
         }
     }
 
@@ -353,7 +369,7 @@ void TradeInterface::Draw()
 {
     if(_view_mode == SHOP_VIEW_MODE_LIST) {
         VideoManager->SetDrawFlags(VIDEO_X_CENTER, VIDEO_Y_BOTTOM, 0);
-        VideoManager->Move(200.0f, 558.0f);
+        VideoManager->Move(200.0f, 210.0f);
         _category_header.Draw();
 
         VideoManager->SetDrawFlags(VIDEO_X_LEFT, 0);
@@ -366,11 +382,11 @@ void TradeInterface::Draw()
         _list_displays[_current_category]->Draw();
     } else if(_view_mode == SHOP_VIEW_MODE_INFO) {
         VideoManager->SetDrawFlags(VIDEO_X_LEFT, VIDEO_Y_BOTTOM, 0);
-        VideoManager->Move(295.0f, 175.0f);
+        VideoManager->Move(295.0f, 593.0f);
         _name_header.Draw();
         _properties_header.Draw();
 
-        VideoManager->MoveRelative(0.0f, -50.0f);
+        VideoManager->MoveRelative(0.0f, 50.0f);
         _selected_icon.Draw();
         VideoManager->MoveRelative(30.0f, 0.0f);
         _selected_name.Draw();
@@ -395,7 +411,7 @@ void TradeInterface::_ChangeViewMode(SHOP_VIEW_MODE new_mode)
         _category_display.ChangeViewMode(_view_mode);
 
         _properties_header.SetOwner(ShopMode::CurrentInstance()->GetMiddleWindow());
-        _properties_header.SetPosition(480.0f, 390.0f);
+        _properties_header.SetPosition(480.0f, 10.0f);
     } else if(new_mode == SHOP_VIEW_MODE_INFO) {
         _view_mode = new_mode;
         ShopMode::CurrentInstance()->ObjectViewer()->ChangeViewMode(_view_mode);
@@ -403,7 +419,7 @@ void TradeInterface::_ChangeViewMode(SHOP_VIEW_MODE new_mode)
         _category_display.SetSelectedObject(_selected_object);
 
         _properties_header.SetOwner(ShopMode::CurrentInstance()->GetBottomWindow());
-        _properties_header.SetPosition(480.0f, 130.0f);
+        _properties_header.SetPosition(480.0f, 15.0f);
 
         _selected_name.SetText(_selected_object->GetObject()->GetName());
         _selected_icon = _selected_object->GetObject()->GetIconImage();
@@ -550,4 +566,4 @@ bool TradeListDisplay::ChangeTradeQuantity(bool less_or_more, uint32 amount)
 
 } // namespace private_shop
 
-} // namespace hoa_shop
+} // namespace vt_shop

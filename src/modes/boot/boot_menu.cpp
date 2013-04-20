@@ -1,5 +1,6 @@
 ///////////////////////////////////////////////////////////////////////////////
-//            Copyright (C) 2004-2010 by The Allacrost Project
+//            Copyright (C) 2004-2011 by The Allacrost Project
+//            Copyright (C) 2012-2013 by Bertram (Valyria Tear)
 //                         All Rights Reserved
 //
 // This code is licensed under the GNU GPL version 2. It is free software
@@ -7,19 +8,20 @@
 // See http://www.gnu.org/copyleft/gpl.html for details.
 ///////////////////////////////////////////////////////////////////////////////
 
-/*!****************************************************************************
- * \file    boot_menu.cpp
- * \author  Viljami Korhonen, mindflayer@allacrost.org
- * \brief   Source file for the boot menus
- *****************************************************************************/
+/** ****************************************************************************
+*** \file    boot_menu.cpp
+*** \author  Viljami Korhonen, mindflayer@allacrost.org
+*** \author  Yohann Ferreira, yohann ferreira orange fr
+*** \brief   Source file for the boot menus
+*** ***************************************************************************/
 
 #include "boot.h"
 #include "boot_menu.h"
 
-using namespace hoa_utils;
-using namespace hoa_video;
+using namespace vt_utils;
+using namespace vt_video;
 
-namespace hoa_boot
+namespace vt_boot
 {
 
 namespace private_boot
@@ -110,4 +112,4 @@ void BootMenu::InputRight()
 
 } // namespace private_boot
 
-} // namespace hoa_boot
+} // namespace vt_boot

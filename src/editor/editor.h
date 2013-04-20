@@ -1,5 +1,6 @@
 ////////////////////////////////////////////////////////////////////////////////
-//            Copyright (C) 2004-2010 by The Allacrost Project
+//            Copyright (C) 2004-2011 by The Allacrost Project
+//            Copyright (C) 2012-2013 by Bertram (Valyria Tear)
 //                         All Rights Reserved
 //
 // This code is licensed under the GNU GPL version 2. It is free software
@@ -10,6 +11,7 @@
 /** ****************************************************************************
 *** \file    editor.h
 *** \author  Philip Vorsilak, gorzuate@allacrost.org
+*** \author  Yohann Ferreira, yohann ferreira orange fr
 *** \brief   Header file for editor's main window and user interface.
 *** ***************************************************************************/
 
@@ -47,7 +49,7 @@
 #include "engine/script/script_read.h"
 
 //! \brief All editor code is contained within this namespace.
-namespace hoa_editor
+namespace vt_editor
 {
 
 //! \brief Various modes for tile editing
@@ -78,11 +80,6 @@ enum TRANSITION_PATTERN_TYPE {
     TOTAL_PATTERN       = 12
 };
 
-
-//! \brief The maximum number of allowable contexts on a map.
-const uint32 MAX_CONTEXTS = 32;
-
-
 class EditorScrollArea;
 
 
@@ -94,8 +91,6 @@ class Editor: public QMainWindow
     // Needed for tile editing and accessing the map properties.
     friend class EditorScrollArea;
     friend class MapPropertiesDialog;
-    friend class MusicDialog;
-    friend class ContextPropertiesDialog;
     friend class LayerDialog;
     friend class LayerCommand;
 
@@ -139,7 +134,6 @@ private slots:
     //! \brief These slots process selection for their item in the View menu.
     //{@
     void _ViewToggleGrid();
-    void _ViewTextures();
     //@}
 
     //! \name Tiles Menu Item Slots
@@ -162,9 +156,7 @@ private slots:
     //! \name Map Menu Item Slots
     //! \brief These slots process selection for their item in the Map menu.
     //{@
-    void _MapSelectMusic();
     void _MapProperties();
-    void _MapAddContext();
     //@}
 
     // Handles layer interaction
@@ -182,9 +174,6 @@ private slots:
     void _HelpAbout();
     void _HelpAboutQt();
     //@}
-
-    //! This slot switches the map context to the designated one for editing.
-    void _SwitchMapContext(int context);
 
     //! Tells whether a given layer can be moved up or down, or deleted.
     bool _CanLayerMoveUp(QTreeWidgetItem *item) const;
@@ -249,7 +238,6 @@ private:
     QAction *_quit_action;
 
     QAction *_toggle_grid_action;
-    QAction *_view_textures_action;
 
     QAction *_undo_action;
     QAction *_redo_action;
@@ -265,9 +253,7 @@ private:
 
     QAction *_edit_tileset_action;
 
-    QAction *_context_properties_action;
     QAction *_map_properties_action;
-    QAction *_select_music_action;
 
     QAction *_help_action;
     QAction *_about_action;
@@ -303,21 +289,11 @@ private:
     //! Selection rectangle toggle view switch.
     bool _select_on;
 
-    //! Textures toggle view switch.
-    bool _textures_on;
-
     //! The stack that contains the undo and redo operations.
     QUndoStack *_undo_stack;
 
-    //! The combobox that allows the user to change the current map context
-    //! for editing. Contains a list of all existing contexts.
-    QComboBox *_context_cbox;
-
-    //! An error dialog for exceeding the maximum allowable number of contexts.
-    QErrorMessage *_error_max_contexts;
-
     //! The editor global script: Used to run some global function needed there.
-    hoa_script::ReadScriptDescriptor _global_script;
+    vt_script::ReadScriptDescriptor _global_script;
 }; // class Editor
 
 
@@ -329,9 +305,7 @@ class EditorScrollArea : public QScrollArea
     //! Needed for changing the editing mode and painting, and accessing the map's properties.
     friend class Editor;
     friend class MapPropertiesDialog;
-    friend class MusicDialog;
     friend class LayerDialog;
-    friend class ContextPropertiesDialog;
     friend class LayerCommand;
 
 public:
@@ -363,14 +337,14 @@ protected:
     //@}
 
 private slots:
-    //! \name Context Menu Slots
-    //! \brief These slots process selection for their item in the Context menu,
+    //! \name Contextual Menu Slots
+    //! \brief These slots process selection for their item in the contextual menu,
     //!        which pops up on right-clicks of the mouse on the map.
     //{@
-    void _ContextInsertRow();
-    void _ContextInsertColumn();
-    void _ContextDeleteRow();
-    void _ContextDeleteColumn();
+    void _MapInsertRow();
+    void _MapInsertColumn();
+    void _MapDeleteRow();
+    void _MapDeleteColumn();
     //@}
 
 private:
@@ -459,7 +433,7 @@ class LayerCommand: public QUndoCommand
 
 public:
     LayerCommand(std::vector<QPoint> indeces, std::vector<int32> previous,
-                 std::vector<int32> modified, uint32 layer_id, int context, Editor *editor,
+                 std::vector<int32> modified, uint32 layer_id, Editor *editor,
                  const QString &text = "Layer Operation", QUndoCommand *parent = 0);
 
     //! \name Undo Functions
@@ -483,14 +457,11 @@ private:
     //! Indicates which map layer this command was performed upon.
     uint32 _edited_layer_id;
 
-    //! A record of the active context when this command was performed.
-    int _context;
-
     //! A reference to the main window so we can get the current map.
     Editor *_editor;
 }; // class LayerCommand: public QUndoCommand
 
-} // namespace hoa_editor
+} // namespace vt_editor
 
 #endif
 // __EDITOR_HEADER__

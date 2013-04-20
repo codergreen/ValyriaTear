@@ -1,5 +1,6 @@
 ///////////////////////////////////////////////////////////////////////////////
-//            Copyright (C) 2004-2010 by The Allacrost Project
+//            Copyright (C) 2004-2011 by The Allacrost Project
+//            Copyright (C) 2012-2013 by Bertram (Valyria Tear)
 //                         All Rights Reserved
 //
 // This code is licensed under the GNU GPL version 2. It is free software
@@ -10,6 +11,7 @@
 /** ****************************************************************************
 *** \file    text.cpp
 *** \author  Lindsay Roberts, linds@allacrost.org
+*** \author  Yohann Ferreira, yohann ferreira orange fr
 *** \brief   Source file for text rendering
 ***
 *** This code makes use of the SDL_ttf font library for representing fonts,
@@ -26,12 +28,12 @@
 
 #include "video.h"
 
-using namespace hoa_utils;
-using namespace hoa_video::private_video;
+using namespace vt_utils;
+using namespace vt_video::private_video;
 
-template<> hoa_video::TextSupervisor *Singleton<hoa_video::TextSupervisor>::_singleton_reference = NULL;
+template<> vt_video::TextSupervisor *Singleton<vt_video::TextSupervisor>::_singleton_reference = NULL;
 
-namespace hoa_video
+namespace vt_video
 {
 
 TextSupervisor *TextManager = NULL;
@@ -148,7 +150,7 @@ static const uint32 AMASK = 0xFF000000;
 // TextTexture class
 // -----------------------------------------------------------------------------
 
-TextTexture::TextTexture(const hoa_utils::ustring &string_, const TextStyle &style_) :
+TextTexture::TextTexture(const vt_utils::ustring &string_, const TextStyle &style_) :
     BaseTexture(),
     string(string_),
     style(style_)
@@ -264,27 +266,21 @@ void TextElement::Draw() const
 void TextElement::Draw(const Color &draw_color) const
 {
     // Don't draw anything if this image is completely transparent (invisible)
-    if(IsFloatEqual(draw_color[3], 0.0f) == true) {
+    if(IsFloatEqual(draw_color[3], 0.0f))
         return;
-    }
 
     glPushMatrix();
     _DrawOrientation();
 
-    float modulation = VideoManager->_screen_fader.GetFadeModulation();
-    // Used to determine if the image color should be modulated by any degree due to screen fading effects
-    bool skip_modulation = (draw_color == Color::white && IsFloatEqual(modulation, 1.0f));
-    if(skip_modulation) {
+    if(draw_color == Color::white) {
         _DrawTexture(_color);
     } else {
-        Color fade_color(modulation, modulation, modulation, 1.0f);
         Color modulated_colors[4];
+        modulated_colors[0] = _color[0] * draw_color;
+        modulated_colors[1] = _color[1] * draw_color;
+        modulated_colors[2] = _color[2] * draw_color;
+        modulated_colors[3] = _color[3] * draw_color;
 
-        fade_color = draw_color * fade_color;
-        modulated_colors[0] = _color[0] * fade_color;
-        modulated_colors[1] = _color[1] * fade_color;
-        modulated_colors[2] = _color[2] * fade_color;
-        modulated_colors[3] = _color[3] * fade_color;
         _DrawTexture(modulated_colors);
     }
 
@@ -421,9 +417,8 @@ void TextImage::Draw() const
 void TextImage::Draw(const Color &draw_color) const
 {
     // Don't draw anything if this image is completely transparent (invisible)
-    if(IsFloatEqual(draw_color[3], 0.0f) == true) {
+    if(IsFloatEqual(draw_color[3], 0.0f))
         return;
-    }
 
     glPushMatrix();
     for(uint32 i = 0; i < _text_sections.size(); ++i) {
@@ -530,7 +525,7 @@ TextSupervisor::~TextSupervisor()
             TTF_CloseFont(fp->ttf_font);
 
         if(fp->glyph_cache) {
-            std::vector<hoa_video::FontGlyph *>::const_iterator it_end = fp->glyph_cache->end();
+            std::vector<vt_video::FontGlyph *>::const_iterator it_end = fp->glyph_cache->end();
             for(std::vector<FontGlyph *>::iterator j = fp->glyph_cache->begin(); j != it_end; ++j) {
                 delete *j;
             }
@@ -678,7 +673,7 @@ void TextSupervisor::Draw(const ustring &text, const TextStyle &style)
 
 
 
-int32 TextSupervisor::CalculateTextWidth(const std::string &font_name, const hoa_utils::ustring &text)
+int32 TextSupervisor::CalculateTextWidth(const std::string &font_name, const vt_utils::ustring &text)
 {
     if(IsFontValid(font_name) == false) {
         IF_PRINT_WARNING(VIDEO_DEBUG) << "font name argument was invalid: " << font_name << std::endl;
@@ -906,9 +901,6 @@ void TextSupervisor::_DrawTextHelper(const uint16 *const text, FontProperties *f
 
     VideoManager->MoveRelative(xoff, yoff);
 
-    float modulation = VideoManager->_screen_fader.GetFadeModulation();
-    Color final_color = text_color * modulation;
-
     VideoManager->EnableVertexArray();
     VideoManager->EnableTextureCoordArray();
 
@@ -960,7 +952,7 @@ void TextSupervisor::_DrawTextHelper(const uint16 *const text, FontProperties *f
         tex_coords[6] = 0.0f;
         tex_coords[7] = 0.0f;
 
-        glColor4fv((GLfloat *)&final_color);
+        glColor4fv((GLfloat *)&text_color);
         glDrawArrays(GL_QUADS, 0, 4);
 
         xpos += glyph_info->advance;
@@ -971,7 +963,7 @@ void TextSupervisor::_DrawTextHelper(const uint16 *const text, FontProperties *f
 
 
 
-bool TextSupervisor::_RenderText(hoa_utils::ustring &string, TextStyle &style, ImageMemory &buffer)
+bool TextSupervisor::_RenderText(vt_utils::ustring &string, TextStyle &style, ImageMemory &buffer)
 {
     FontProperties *fp = _font_map[style.font];
     TTF_Font *font = fp->ttf_font;
@@ -1092,6 +1084,6 @@ bool TextSupervisor::_RenderText(hoa_utils::ustring &string, TextStyle &style, I
     SDL_FreeSurface(intermediary);
 
     return true;
-} // bool TextSupervisor::_RenderText(hoa_utils::ustring& string, TextStyle& style, ImageMemory& buffer)
+} // bool TextSupervisor::_RenderText(vt_utils::ustring& string, TextStyle& style, ImageMemory& buffer)
 
-}  // namespace hoa_video
+}  // namespace vt_video

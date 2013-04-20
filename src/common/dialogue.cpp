@@ -1,5 +1,6 @@
 ///////////////////////////////////////////////////////////////////////////////
-//            Copyright (C) 2004-2010 by The Allacrost Project
+//            Copyright (C) 2004-2011 by The Allacrost Project
+//            Copyright (C) 2012-2013 by Bertram (Valyria Tear)
 //                         All Rights Reserved
 //
 // This code is licensed under the GNU GPL version 2. It is free software
@@ -10,6 +11,7 @@
 /** ****************************************************************************
 *** \file    dialogue.cpp
 *** \author  Tyler Olsen, roots@allacrost.org
+*** \author  Yohann Ferreira, yohann ferreira orange fr
 *** \brief   Source file for common dialogue code.
 *** ***************************************************************************/
 
@@ -20,12 +22,12 @@
 
 #include "engine/video/video.h"
 
-using namespace hoa_system;
-using namespace hoa_utils;
-using namespace hoa_video;
-using namespace hoa_gui;
+using namespace vt_system;
+using namespace vt_utils;
+using namespace vt_video;
+using namespace vt_gui;
 
-namespace hoa_common
+namespace vt_common
 {
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -34,8 +36,7 @@ namespace hoa_common
 
 CommonDialogue::CommonDialogue(uint32 id) :
     _dialogue_id(id),
-    _times_seen(0),
-    _max_views(COMMON_DIALOGUE_INFINITE_VIEWS),
+    _dialogue_seen(false),
     _line_count(0)
 {}
 
@@ -119,13 +120,6 @@ bool CommonDialogue::Validate()
     // Valid dialogues need to have at least one line
     if(_line_count == 0) {
         IF_PRINT_WARNING(COMMON_DEBUG) << "Validation failed for dialogue #" << _dialogue_id << ": no lines" << std::endl;
-        return false;
-    }
-
-    // Check that the dialogue has not been seen more times than it is allowed to be viewed
-    if((_max_views != COMMON_DIALOGUE_INFINITE_VIEWS) && (_times_seen > static_cast<uint32>(_max_views))) {
-        IF_PRINT_WARNING(COMMON_DEBUG) << "Validation failed for dialogue #" << _dialogue_id
-                                       << ": discrepency in max/seen view counts" << std::endl;
         return false;
     }
 
@@ -250,7 +244,6 @@ void CommonDialogueWindow::Clear()
 
 void CommonDialogueWindow::Draw()
 {
-    // Temporarily change the coordinate system to 1024x768 and draw the contents of the dialogue window
     VideoManager->PushState();
     VideoManager->SetStandardCoordSys();
     VideoManager->SetDrawFlags(VIDEO_X_CENTER, VIDEO_Y_BOTTOM, VIDEO_BLEND, 0);
@@ -258,20 +251,22 @@ void CommonDialogueWindow::Draw()
     VideoManager->Move(_pos_x, _pos_y);
     _parchment_image.Draw();
 
-    // TODO: nameplate is not drawn for now because its not visually appealing. Eventually we'll either decide
-    // to remove it entirely or re-enable it with an improved nameplate.
-// 	VideoManager->MoveRelative(-370.0f, -10.0f);
-// 	_nameplate_image.Draw();
-
-    VideoManager->MoveRelative(-370.0f, -15.0f);
-    _name_text.Draw();
-
-    if(_portrait_image != NULL) {
-        VideoManager->MoveRelative(0.0f, -25.0f);
+    VideoManager->MoveRelative(-370.0f, -45.0f);
+    if(_portrait_image)
         _portrait_image->Draw();
-        VideoManager->MoveRelative(0.0f, 25.0f);
+
+    if (!_name_text.GetString().empty()) {
+        VideoManager->MoveRelative(0.0f, 30.0f);
+        _nameplate_image.Draw();
+
+        VideoManager->MoveRelative(0.0f, -6.0f);
+        _name_text.Draw();
+    }
+    else {
+        VideoManager->MoveRelative(0.0f, 24.0f);
     }
 
+    VideoManager->MoveRelative(0.0f, 5.0f);
     _blink_time += SystemManager->GetUpdateTime();
     if(_blink_time > 500) {
         _blink_time -= 500;
@@ -385,4 +380,4 @@ CommonDialogue *CommonDialogueSupervisor::GetDialogue(uint32 dialogue_id)
     }
 }
 
-} // namespace hoa_common
+} // namespace vt_common

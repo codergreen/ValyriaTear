@@ -1,6 +1,6 @@
 ///////////////////////////////////////////////////////////////////////////////
 //            Copyright (C) 2004-2011 by The Allacrost Project
-//            Copyright (C) 2012 by Bertram (Valyria Tear)
+//            Copyright (C) 2012-2013 by Bertram (Valyria Tear)
 //                         All Rights Reserved
 //
 // This code is licensed under the GNU GPL version 2. It is free software
@@ -22,16 +22,16 @@
 #include "modes/battle/battle.h"
 #include "common/global/global.h"
 
-using namespace hoa_utils;
-using namespace hoa_audio;
-using namespace hoa_mode_manager;
-using namespace hoa_video;
-using namespace hoa_script;
-using namespace hoa_system;
-using namespace hoa_global;
-using namespace hoa_battle;
+using namespace vt_utils;
+using namespace vt_audio;
+using namespace vt_mode_manager;
+using namespace vt_video;
+using namespace vt_script;
+using namespace vt_system;
+using namespace vt_global;
+using namespace vt_battle;
 
-namespace hoa_map
+namespace vt_map
 {
 
 namespace private_map
@@ -583,7 +583,7 @@ MapSprite::~MapSprite()
         delete _face_portrait;
 }
 
-bool _LoadAnimations(std::vector<hoa_video::AnimatedImage>& animations, const std::string &filename)
+bool _LoadAnimations(std::vector<vt_video::AnimatedImage>& animations, const std::string &filename)
 {
     // Prepare to add the animations for each directions, if needed.
 
@@ -592,7 +592,7 @@ bool _LoadAnimations(std::vector<hoa_video::AnimatedImage>& animations, const st
     for(uint8 i = 0; i < NUM_ANIM_DIRECTIONS; ++i)
         animations.push_back(AnimatedImage());
 
-    hoa_script::ReadScriptDescriptor animations_script;
+    vt_script::ReadScriptDescriptor animations_script;
     if(!animations_script.OpenFile(filename))
         return false;
 
@@ -606,7 +606,7 @@ bool _LoadAnimations(std::vector<hoa_video::AnimatedImage>& animations, const st
 
     std::string image_filename = animations_script.ReadString("image_filename");
 
-    if(!hoa_utils::DoesFileExist(image_filename)) {
+    if(!vt_utils::DoesFileExist(image_filename)) {
         PRINT_WARNING << "The image file doesn't exist: " << image_filename << std::endl;
         animations_script.CloseTable();
         animations_script.CloseFile();
@@ -773,6 +773,8 @@ void MapSprite::SetCustomAnimation(const std::string &animation_name, uint32 tim
     // Same if the key isn't found
     std::map<std::string, AnimatedImage>::iterator it = _custom_animations.find(animation_name);
     if(it == _custom_animations.end()) {
+        PRINT_WARNING << "Couldn't find any custom animation '" << animation_name
+            << "' for sprite: " << GetSpriteName() << std::endl;
         _custom_animation_on = false;
         return;
     }
@@ -785,6 +787,8 @@ void MapSprite::SetCustomAnimation(const std::string &animation_name, uint32 tim
     // Still check the animation length
     if(time == 0) {
         _custom_animation_on = false;
+        PRINT_WARNING << "Zero-length custom animation '" << animation_name
+            << "' for sprite: " << GetSpriteName() << std::endl;
         return;
     }
 
@@ -799,7 +803,7 @@ void MapSprite::ReloadSprite(const std::string& sprite_name)
     if (sprite_name == GetSpriteName())
         return;
 
-    hoa_script::ReadScriptDescriptor& script = GlobalManager->GetMapSpriteScript();
+    vt_script::ReadScriptDescriptor& script = GlobalManager->GetMapSpriteScript();
 
     if (!script.IsFileOpen())
         return;
@@ -950,7 +954,7 @@ void MapSprite::Update()
     // Take care of adapting the update time according to the sprite speed when walking or running
     uint32 elapsed_time = 0;
     if(_animation == &_walking_animations || (_has_running_animations && _animation == &_running_animations)) {
-        elapsed_time = (uint32)(((float)hoa_system::SystemManager->GetUpdateTime()) * NORMAL_SPEED / movement_speed);
+        elapsed_time = (uint32)(((float)vt_system::SystemManager->GetUpdateTime()) * NORMAL_SPEED / movement_speed);
     }
 
     _animation->at(_current_anim_direction).Update(elapsed_time);
@@ -1026,10 +1030,6 @@ void MapSprite::AddDialogueReference(uint32 dialogue_id)
 {
     _dialogue_references.push_back(dialogue_id);
     UpdateDialogueStatus();
-    // TODO: The call above causes a warning to be printed out if the sprite has been created but the dialogue has not yet.
-    // Map scripts typically create all sprites first (including their dialogue references) before creating the dialogues.
-    // We need a safe way to add dialogue references to the sprite without causing these warnings to be printed when the
-    // map is loading.
 }
 
 void MapSprite::ClearDialogueReferences()
@@ -1068,25 +1068,27 @@ void MapSprite::UpdateDialogueStatus()
     _has_available_dialogue = false;
     _has_unseen_dialogue = false;
 
+    SpriteDialogue *dialogue = NULL;
+
     for(uint32 i = 0; i < _dialogue_references.size(); i++) {
-        SpriteDialogue *dialogue = MapMode::CurrentInstance()->GetDialogueSupervisor()->GetDialogue(_dialogue_references[i]);
-        if(dialogue == NULL) {
-            IF_PRINT_WARNING(MAP_DEBUG) << "sprite: " << object_id << " is referencing unknown dialogue: " << _dialogue_references[i] << std::endl;
+        dialogue = MapMode::CurrentInstance()->GetDialogueSupervisor()->GetDialogue(_dialogue_references[i]);
+        if(!dialogue) {
+            PRINT_WARNING << "sprite: " << object_id << " is referencing unknown dialogue: "
+                          << _dialogue_references[i] << std::endl;
             continue;
         }
 
-        if(dialogue->IsAvailable()) {
-            _has_available_dialogue = true;
-            if(_next_dialogue < 0)
-                _next_dialogue = i;
-        }
-        if(dialogue->HasAlreadySeen() == false) {
-            _has_unseen_dialogue = true;
-        }
-    }
+        // try and not take already seen dialogues.
+        // So we take only the last dialogue reference even if already seen.
+        if (dialogue->HasAlreadySeen() && i < _dialogue_references.size() - 1)
+            continue;
 
-    // TODO: if the sprite has available, unseen dialogue and the _next_dialogue pointer is pointing to a dialogue that is already seen, change it
-    // to point to the unseen available dialogue
+        _has_available_dialogue = true;
+        if(_next_dialogue < 0)
+            _next_dialogue = i;
+
+        _has_unseen_dialogue = !dialogue->HasAlreadySeen();
+    }
 }
 
 void MapSprite::IncrementNextDialogue()
@@ -1107,13 +1109,11 @@ void MapSprite::IncrementNextDialogue()
         }
 
         SpriteDialogue *dialogue = MapMode::CurrentInstance()->GetDialogueSupervisor()->GetDialogue(_dialogue_references[_next_dialogue]);
-        if(dialogue && dialogue->IsAvailable()) {
+        if(dialogue)
             return;
-        }
+
         // If this case occurs, all dialogues are now unavailable
         else if(_next_dialogue == last_dialogue) {
-            IF_PRINT_WARNING(MAP_DEBUG) << "all referenced dialogues are now unavailable for this sprite" << std::endl;
-            _has_available_dialogue = false;
             _has_unseen_dialogue = false;
             _dialogue_started = false;
             return;
@@ -1342,4 +1342,4 @@ void EnemySprite::Draw()
 
 } // namespace private_map
 
-} // namespace hoa_map
+} // namespace vt_map

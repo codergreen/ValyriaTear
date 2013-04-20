@@ -1,5 +1,6 @@
 ///////////////////////////////////////////////////////////////////////////////
-//            Copyright (C) 2004-2010 by The Allacrost Project
+//            Copyright (C) 2004-2011 by The Allacrost Project
+//            Copyright (C) 2012-2013 by Bertram (Valyria Tear)
 //                         All Rights Reserved
 //
 // This code is licensed under the GNU GPL version 2. It is free software
@@ -10,28 +11,29 @@
 /** ****************************************************************************
 *** \file    map_events.cpp
 *** \author  Tyler Olsen, roots@allacrost.org
+*** \author  Yohann Ferreira, yohann ferreira orange fr
 *** \brief   Source file for map mode events and event processing.
 *** ***************************************************************************/
 
 #include "modes/map/map_events.h"
 
-#include "modes/map/map.h"
+#include "modes/map/map_mode.h"
 
 #include "modes/map/map_sprites.h"
 
 #include "modes/shop/shop.h"
 #include "modes/battle/battle.h"
 
-using namespace hoa_audio;
-using namespace hoa_mode_manager;
-using namespace hoa_script;
-using namespace hoa_system;
-using namespace hoa_video;
+using namespace vt_audio;
+using namespace vt_mode_manager;
+using namespace vt_script;
+using namespace vt_system;
+using namespace vt_video;
 
-using namespace hoa_battle;
-using namespace hoa_shop;
+using namespace vt_battle;
+using namespace vt_shop;
 
-namespace hoa_map
+namespace vt_map
 {
 
 namespace private_map
@@ -43,6 +45,11 @@ namespace private_map
 
 void SpriteEvent::_Start()
 {
+    if (!_sprite) {
+        PRINT_WARNING << "No valid sprite given in event: " << GetEventID() << std::endl;
+        return;
+    }
+
     EventSupervisor *event_supervisor = MapMode::CurrentInstance()->GetEventSupervisor();
     // Terminate the previous event whenever it is another sprite event.
     if(dynamic_cast<SpriteEvent *>(_sprite->control_event) && event_supervisor) {
@@ -138,10 +145,12 @@ bool SoundEvent::_Update()
 // -----------------------------------------------------------------------------
 
 MapTransitionEvent::MapTransitionEvent(const std::string &event_id,
-                                       const std::string &filename,
+                                       const std::string &data_filename,
+                                       const std::string &script_filename,
                                        const std::string &coming_from) :
     MapEvent(event_id, MAP_TRANSITION_EVENT),
-    _transition_map_filename(filename),
+    _transition_map_data_filename(data_filename),
+    _transition_map_script_filename(script_filename),
     _transition_origin(coming_from),
     _done(false)
 {}
@@ -166,8 +175,8 @@ bool MapTransitionEvent::_Update()
     // Only load the map once the fade out is done, since the load time can
     // break the fade smoothness and visible duration.
     if(!_done) {
-        hoa_global::GlobalManager->SetPreviousLocation(_transition_origin);
-        MapMode *MM = new MapMode(_transition_map_filename);
+        vt_global::GlobalManager->SetPreviousLocation(_transition_origin);
+        MapMode *MM = new MapMode(_transition_map_data_filename, _transition_map_script_filename);
         ModeManager->Pop();
         ModeManager->Push(MM, false, true);
         _done = true;
@@ -213,8 +222,8 @@ bool JoinPartyEvent::_Update()
 
 BattleEncounterEvent::BattleEncounterEvent(const std::string &event_id) :
     MapEvent(event_id, BATTLE_ENCOUNTER_EVENT),
-    _battle_music("mus/Confrontation.ogg"),
-    _battle_background("img/backdrops/battle/desert.png")
+    _battle_music("mus/heroism-OGA-Edward-J-Blakeley.ogg"),
+    _battle_background("img/backdrops/battle/desert_cave/desert_cave.png")
 {}
 
 
@@ -638,8 +647,8 @@ bool PathMoveSpriteEvent::_Update()
     float distance_moved = _sprite->CalculateDistanceMoved();
 
     // Check whether the sprite has arrived at the position of the current node
-    if(hoa_utils::IsFloatEqual(sprite_position_x, _current_node_x, distance_moved)
-            && hoa_utils::IsFloatEqual(sprite_position_y, _current_node_y, distance_moved)) {
+    if(vt_utils::IsFloatEqual(sprite_position_x, _current_node_x, distance_moved)
+            && vt_utils::IsFloatEqual(sprite_position_y, _current_node_y, distance_moved)) {
         ++_current_node;
 
         if(_current_node < _path.size()) {
@@ -656,8 +665,8 @@ bool PathMoveSpriteEvent::_Update()
     _SetSpriteDirection();
 
     // End the path event
-    if(hoa_utils::IsFloatEqual(sprite_position_x, _destination_x, distance_moved)
-            && hoa_utils::IsFloatEqual(sprite_position_y, _destination_y, distance_moved)) {
+    if(vt_utils::IsFloatEqual(sprite_position_x, _destination_x, distance_moved)
+            && vt_utils::IsFloatEqual(sprite_position_y, _destination_y, distance_moved)) {
         Terminate();
         return true;
     }
@@ -811,6 +820,10 @@ bool AnimateSpriteEvent::_Update()
 
 void AnimateSpriteEvent::Terminate()
 {
+    // Disable a possible still running custom animation.
+    // Useful when calling TerminateAllEvents() on a sprite.
+    if (_map_sprite)
+        _map_sprite->DisableCustomAnimation();
     _map_sprite = 0;
     _animation_name.clear();
     _animation_time = 0;
@@ -1383,4 +1396,4 @@ void EventSupervisor::_ExamineEventLinks(MapEvent *parent_event, bool event_star
 
 } // namespace private_map
 
-} // namespace hoa_map
+} // namespace vt_map

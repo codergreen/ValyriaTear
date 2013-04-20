@@ -1,5 +1,6 @@
 ///////////////////////////////////////////////////////////////////////////////
-//            Copyright (C) 2004-2010 by The Allacrost Project
+//            Copyright (C) 2004-2011 by The Allacrost Project
+//            Copyright (C) 2012-2013 by Bertram (Valyria Tear)
 //                         All Rights Reserved
 //
 // This code is licensed under the GNU GPL version 2. It is free software
@@ -12,6 +13,7 @@
 *** \author  Tyler Olsen - roots@allacrost.org
 *** \author  Mois�s Ferrer Serra - byaku@allacrost.org
 *** \author  Aaron Smith - etherstar@allacrost.org
+*** \author  Yohann Ferreira, yohann ferreira orange fr
 *** \brief   Implementation of the audio engine singleton.
 ***
 *** The code included here implements the interface of the audio singleton.
@@ -24,15 +26,15 @@
 #include "engine/system.h"
 #include "engine/mode_manager.h"
 
-using namespace hoa_utils;
-using namespace hoa_system;
-using namespace hoa_audio::private_audio;
+using namespace vt_utils;
+using namespace vt_system;
+using namespace vt_audio::private_audio;
 
 
-template<> hoa_audio::AudioEngine *Singleton<hoa_audio::AudioEngine>::_singleton_reference = 0;
+template<> vt_audio::AudioEngine *Singleton<vt_audio::AudioEngine>::_singleton_reference = 0;
 
 
-namespace hoa_audio
+namespace vt_audio
 {
 
 AudioEngine *AudioManager = NULL;
@@ -364,7 +366,7 @@ void AudioEngine::SetListenerOrientation(const float orientation[3])
     memcpy(_listener_orientation, orientation, sizeof(float) * 3);
 }
 
-bool AudioEngine::LoadSound(const std::string &filename, hoa_mode_manager::GameMode *gm)
+bool AudioEngine::LoadSound(const std::string &filename, vt_mode_manager::GameMode *gm)
 {
     if(!DoesFileExist(filename))
         return false;
@@ -391,7 +393,7 @@ bool AudioEngine::LoadSound(const std::string &filename, hoa_mode_manager::GameM
     return true;
 }
 
-bool AudioEngine::LoadMusic(const std::string &filename, hoa_mode_manager::GameMode *gm)
+bool AudioEngine::LoadMusic(const std::string &filename, vt_mode_manager::GameMode *gm)
 {
     MusicDescriptor *new_music = new MusicDescriptor();
 
@@ -443,7 +445,7 @@ void AudioEngine::PlayMusic(const std::string &filename)
     if(element == _audio_cache.end()) {
         // Get the current game mode, so that the loading/freeing micro management
         // is handled the most possible.
-        hoa_mode_manager::GameMode *gm = hoa_mode_manager::ModeManager->GetTop();
+        vt_mode_manager::GameMode *gm = vt_mode_manager::ModeManager->GetTop();
         if(!LoadMusic(filename, gm)) {
             IF_PRINT_WARNING(AUDIO_DEBUG)
                     << "could not play music from cache because "
@@ -529,7 +531,7 @@ MusicDescriptor *AudioEngine::RetrieveMusic(const std::string &filename)
     }
 }
 
-void AudioEngine::RemoveOwner(hoa_mode_manager::GameMode *gm)
+void AudioEngine::RemoveOwner(vt_mode_manager::GameMode *gm)
 {
     if(!gm)
         return;
@@ -703,4 +705,4 @@ bool AudioEngine::_LoadAudio(AudioDescriptor *audio, const std::string &filename
     return true;
 } // bool AudioEngine::_LoadAudio(AudioDescriptor* audio, const std::string& filename)
 
-} // namespace hoa_audio
+} // namespace vt_audio

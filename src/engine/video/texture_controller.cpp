@@ -1,5 +1,6 @@
 ///////////////////////////////////////////////////////////////////////////////
-//            Copyright (C) 2004-2010 by The Allacrost Project
+//            Copyright (C) 2004-2011 by The Allacrost Project
+//            Copyright (C) 2012-2013 by Bertram (Valyria Tear)
 //                         All Rights Reserved
 //
 // This code is licensed under the GNU GPL version 2. It is free software
@@ -10,6 +11,7 @@
 /** ****************************************************************************
 *** \file    texture_controller.cpp
 *** \author  Tyler Olsen, roots@allacrost.org
+*** \author  Yohann Ferreira, yohann ferreira orange fr
 *** \brief   Source file for texture management code
 *** ***************************************************************************/
 
@@ -17,12 +19,12 @@
 
 #include "texture_controller.h"
 
-using namespace hoa_utils;
-using namespace hoa_video::private_video;
+using namespace vt_utils;
+using namespace vt_video::private_video;
 
-template<> hoa_video::TextureController *Singleton<hoa_video::TextureController>::_singleton_reference = NULL;
+template<> vt_video::TextureController *Singleton<vt_video::TextureController>::_singleton_reference = NULL;
 
-namespace hoa_video
+namespace vt_video
 {
 
 TextureController *TextureManager = NULL;
@@ -121,7 +123,7 @@ bool TextureController::UnloadTextures()
         std::vector<FontGlyph *>* glyph_cache = j->second->glyph_cache;
 
         if(glyph_cache) {
-            std::vector<hoa_video::FontGlyph *>::iterator it_end = glyph_cache->end();
+            std::vector<vt_video::FontGlyph *>::iterator it_end = glyph_cache->end();
             for(std::vector<FontGlyph *>::iterator k = glyph_cache->begin();
                     k != it_end; ++k) {
                 if(*k)
@@ -337,7 +339,7 @@ bool TextureController::_SaveTempTextures()
             IF_PRINT_DEBUG(VIDEO_DEBUG) << " saving temporary texture " << image->filename << std::endl;
             ImageMemory buffer;
             buffer.CopyFromImage(image);
-            std::string path = GetUserDataPath(true);
+            std::string path = GetUserDataPath();
             if(buffer.SaveImage(path + image->filename + ".png", true) == false) {
                 success = false;
                 IF_PRINT_WARNING(VIDEO_DEBUG) << "call to ImageMemory::SaveImage() failed" << std::endl;
@@ -680,4 +682,4 @@ void TextureController::_UnregisterTextTexture(TextTexture *tex)
 }
 
 
-}  // namespace hoa_video
+}  // namespace vt_video

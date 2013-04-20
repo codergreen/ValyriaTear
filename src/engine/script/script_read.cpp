@@ -1,5 +1,6 @@
 ///////////////////////////////////////////////////////////////////////////////
-//            Copyright (C) 2004-2010 by The Allacrost Project
+//            Copyright (C) 2004-2011 by The Allacrost Project
+//            Copyright (C) 2012-2013 by Bertram (Valyria Tear)
 //                         All Rights Reserved
 //
 // This code is licensed under the GNU GPL version 2. It is free software
@@ -10,7 +11,8 @@
 /** ****************************************************************************
 *** \file    script_read.cpp
 *** \author  Daniel Steuernol - steu@allacrost.org,
-***          Tyler Olsen - roots@allacrost.org
+*** \author  Tyler Olsen - roots@allacrost.org
+*** \author  Yohann Ferreira, yohann ferreira orange fr
 *** \brief   Source file for the ReadScriptDescriptor class.
 *** ***************************************************************************/
 
@@ -21,10 +23,10 @@
 
 using namespace luabind;
 
-using namespace hoa_utils;
-using namespace hoa_script::private_script;
+using namespace vt_utils;
+using namespace vt_script::private_script;
 
-namespace hoa_script
+namespace vt_script
 {
 
 ReadScriptDescriptor::~ReadScriptDescriptor()
@@ -295,6 +297,9 @@ bool ReadScriptDescriptor::OpenTable(const std::string &table_name, bool use_glo
     }
 
     else { // The table to fetch is an element of another table
+        if (!DoesTableExist(table_name))
+            return false;
+
         lua_pushstring(_lstack, table_name.c_str());
         lua_gettable(_lstack, STACK_TOP - 1);
         if(!lua_istable(_lstack, STACK_TOP)) {
@@ -317,6 +322,9 @@ bool ReadScriptDescriptor::OpenTable(int32 table_name)
                                        << "to open the with the element key " << table_name << std::endl;
         return false;
     }
+
+    if (!DoesTableExist(table_name))
+        return false;
 
     lua_pushnumber(_lstack, table_name);
 
@@ -591,4 +599,4 @@ void ReadScriptDescriptor::DEBUG_PrintTable(object table, int tab)
     }
 }
 
-} // namespace hoa_script
+} // namespace vt_script

@@ -1,6 +1,6 @@
 ///////////////////////////////////////////////////////////////////////////////
 //            Copyright (C) 2004-2011 by The Allacrost Project
-//            Copyright (C) 2012 by Bertram (Valyria Tear)
+//            Copyright (C) 2012-2013 by Bertram (Valyria Tear)
 //                         All Rights Reserved
 //
 // This code is licensed under the GNU GPL version 2. It is free software
@@ -17,25 +17,28 @@
 
 #include "modes/map/map_dialogue.h"
 
-#include "modes/map/map.h"
+#include "modes/map/map_mode.h"
 #include "modes/map/map_events.h"
 #include "modes/map/map_sprites.h"
 
 #include "engine/input.h"
 
-using namespace hoa_utils;
-using namespace hoa_audio;
-using namespace hoa_video;
-using namespace hoa_gui;
-using namespace hoa_input;
-using namespace hoa_mode_manager;
-using namespace hoa_script;
-using namespace hoa_system;
-using namespace hoa_global;
-using namespace hoa_menu;
-using namespace hoa_common;
+namespace vt_common {
+extern bool COMMON_DEBUG;
+}
 
-namespace hoa_map
+using namespace vt_utils;
+using namespace vt_audio;
+using namespace vt_video;
+using namespace vt_gui;
+using namespace vt_input;
+using namespace vt_mode_manager;
+using namespace vt_script;
+using namespace vt_system;
+using namespace vt_global;
+using namespace vt_common;
+
+namespace vt_map
 {
 
 namespace private_map
@@ -49,7 +52,7 @@ SpriteDialogue::SpriteDialogue(uint32 id) :
     CommonDialogue(id),
     _input_blocked(false),
     _restore_state(true),
-    _event_name("dialogue#" + hoa_utils::NumberToString(id))
+    _event_name("dialogue#" + vt_utils::NumberToString(id))
 {}
 
 SpriteDialogue::SpriteDialogue() :
@@ -57,7 +60,7 @@ SpriteDialogue::SpriteDialogue() :
     _input_blocked(false),
     _restore_state(true)
 {
-    _event_name = "dialogue#" + hoa_utils::NumberToString(GetDialogueID());
+    _event_name = "dialogue#" + vt_utils::NumberToString(GetDialogueID());
 }
 
 void SpriteDialogue::AddLine(const std::string &text, uint32 speaker_id)
@@ -378,7 +381,7 @@ void DialogueSupervisor::EndDialogue()
         return;
     }
 
-    _current_dialogue->IncrementTimesSeen();
+    _current_dialogue->SetAsSeen();
 
     // We only want to call the RestoreState function *once* for each speaker, so first we have to construct a list of pointers
     // for all speakers without duplication (i.e. the case where a speaker spoke more than one line of dialogue).
@@ -495,7 +498,7 @@ void DialogueSupervisor::_BeginLine()
     if(!emote_event.empty() && !_emote_triggered) {
         MapSprite *sprite = dynamic_cast<MapSprite *>(map_mode->GetObjectSupervisor()->GetObject(_current_dialogue->GetLineSpeaker(_line_counter)));
         if(sprite) {
-            sprite->Emote(emote_event, (hoa_map::private_map::ANIM_DIRECTIONS)sprite->GetCurrentAnimationDirection());
+            sprite->Emote(emote_event, (vt_map::private_map::ANIM_DIRECTIONS)sprite->GetCurrentAnimationDirection());
             _state = DIALOGUE_STATE_EMOTE;
             _emote_triggered = true;
             return;
@@ -608,4 +611,4 @@ void DialogueSupervisor::_EndLine()
 
 } // namespace private_map
 
-} // namespace hoa_map
+} // namespace vt_map

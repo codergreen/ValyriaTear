@@ -1,5 +1,6 @@
 ////////////////////////////////////////////////////////////////////////////////
-//            Copyright (C) 2004-2010 by The Allacrost Project
+//            Copyright (C) 2004-2011 by The Allacrost Project
+//            Copyright (C) 2012-2013 by Bertram (Valyria Tear)
 //                         All Rights Reserved
 //
 // This code is licensed under the GNU GPL version 2. It is free software
@@ -10,6 +11,7 @@
 /** ****************************************************************************
 *** \file    global_actors.cpp
 *** \author  Tyler Olsen, roots@allacrost.org
+*** \author  Yohann Ferreira, yohann ferreira orange fr
 *** \brief   Source file for global game actors
 *** ***************************************************************************/
 
@@ -20,12 +22,14 @@
 #include "global_effects.h"
 #include "global_skills.h"
 
-using namespace hoa_utils;
-using namespace hoa_video;
-using namespace hoa_script;
+using namespace vt_utils;
+using namespace vt_video;
+using namespace vt_script;
 
-namespace hoa_global
+namespace vt_global
 {
+
+extern bool GLOBAL_DEBUG;
 
 ////////////////////////////////////////////////////////////////////////////////
 // GlobalAttackPoint class
@@ -349,7 +353,37 @@ float GlobalActor::GetTotalEvadeRating(uint32 index) const
     return _attack_points[index]->GetTotalEvadeRating();
 }
 
+uint32 GlobalActor::GetAverageDefense()
+{
+    uint32 phys_defense = 0;
 
+    for(uint32 i = 0; i < _attack_points.size(); i++)
+        phys_defense += _attack_points[i]->GetTotalPhysicalDefense();
+    phys_defense /= _attack_points.size();
+
+    return phys_defense;
+}
+
+uint32 GlobalActor::GetAverageMagicalDefense()
+{
+    uint32 mag_defense = 0;
+
+    for(uint32 i = 0; i < _attack_points.size(); i++)
+        mag_defense += _attack_points[i]->GetTotalMagicalDefense();
+    mag_defense /= _attack_points.size();
+    return mag_defense;
+}
+
+float GlobalActor::GetAverageEvadeRating()
+{
+    float evade = 0.0f;
+
+    for(uint32 i = 0; i < _attack_points.size(); i++)
+        evade += _attack_points[i]->GetTotalEvadeRating();
+    evade /= static_cast<float>(_attack_points.size());
+
+    return evade;
+}
 
 GlobalArmor *GlobalActor::GetArmorEquipped(uint32 index) const
 {
@@ -361,7 +395,17 @@ GlobalArmor *GlobalActor::GetArmorEquipped(uint32 index) const
     return _armor_equipped[index];
 }
 
+bool GlobalActor::HasEquipment() const
+{
+    if (_weapon_equipped)
+        return true;
 
+    for (uint32 i = 0; i < _armor_equipped.size(); ++i) {
+        if (_armor_equipped.at(i) != NULL)
+            return true;
+    }
+    return false;
+}
 
 GlobalAttackPoint *GlobalActor::GetAttackPoint(uint32 index) const
 {
@@ -797,6 +841,18 @@ GlobalCharacter::GlobalCharacter(uint32 id, bool initial) :
     // Set up the map sprite name (untranslated) used as a string id to later link it with a map sprite.
     _map_sprite_name = char_script.ReadString("map_sprite_name");
 
+    // Load the special skills category name and icon
+    _special_category_name = MakeUnicodeString(char_script.ReadString("special_skill_category_name"));
+    _special_category_icon = char_script.ReadString("special_skill_category_icon");
+
+    // Load the bare hand skills available
+    if (char_script.DoesTableExist("bare_hands_skills")) {
+        std::vector<uint32> bare_skills;
+        char_script.ReadUIntVector("bare_hands_skills", bare_skills);
+        for (uint32 i = 0; i < bare_skills.size(); ++i)
+            _AddBareHandsSkill(bare_skills[i]);
+    }
+
     // Read each battle_animations table keys and store the corresponding animation in memory.
     std::vector<std::string> keys_vect;
     char_script.ReadTableKeys("battle_animations", keys_vect);
@@ -912,29 +968,32 @@ GlobalCharacter::GlobalCharacter(uint32 id, bool initial) :
             }
         }
 
-        char_script.CloseTable();
+        char_script.CloseTable(); // skills
         if(char_script.IsErrorDetected()) {
             if(GLOBAL_DEBUG) {
                 PRINT_WARNING << "one or more errors occurred while reading skill data - they are listed below"
                               << std::endl << char_script.GetErrorMessages() << std::endl;
             }
         }
+
+        // If initial, determine the character's XP for next level.
+        std::vector<int32> xp_per_levels;
+        char_script.OpenTable("growth");
+        char_script.ReadIntVector("experience_for_next_level", xp_per_levels);
+        if (_experience_level <= xp_per_levels.size()) {
+            _experience_for_next_level = xp_per_levels[_experience_level - 1];
+        }
+        else {
+            PRINT_ERROR << "No Xp for next level found for character id " << _id
+                << " at level " << _experience_level << std::endl;
+            // Bad default
+            _experience_for_next_level = 100000;
+        }
+        char_script.CloseTable(); // growth
     } // if (initial)
 
     char_script.CloseTable(); // "characters[id]"
     char_script.CloseTable(); // "characters"
-
-    // Determine the character's initial growth if necessary
-    if(initial) {
-        try {
-            ScriptCallFunction<void>(char_script.GetLuaState(), "DetermineNextLevelGrowth", this);
-            _ConstructPeriodicGrowth();
-        } catch(luabind::error e) {
-            ScriptManager->HandleLuaError(e);
-        } catch(luabind::cast_failed e) {
-            ScriptManager->HandleCastError(e);
-        }
-    }
 
     // Close the script file and calculate all rating totals
     if(char_script.IsErrorDetected()) {
@@ -956,7 +1015,7 @@ bool GlobalCharacter::AddExperiencePoints(uint32 xp)
 {
     _experience_points += xp;
     _experience_for_next_level -= xp;
-    return _CheckForGrowth();
+    return ReachedNewExperienceLevel();
 }
 
 
@@ -964,11 +1023,12 @@ bool GlobalCharacter::AddExperiencePoints(uint32 xp)
 void GlobalCharacter::AddSkill(uint32 skill_id)
 {
     if(skill_id == 0) {
-        IF_PRINT_WARNING(GLOBAL_DEBUG) << "function received an invalid skill_id argument: " << skill_id << std::endl;
+        PRINT_WARNING << "function received an invalid skill_id argument: " << skill_id << std::endl;
         return;
     }
     if(_skills.find(skill_id) != _skills.end()) {
-        IF_PRINT_WARNING(GLOBAL_DEBUG) << "failed to add skill because the character already knew this skill: " << skill_id << std::endl;
+        PRINT_WARNING << "failed to add skill because the character already knew this skill: "
+            << skill_id << std::endl;
         return;
     }
 
@@ -982,22 +1042,20 @@ void GlobalCharacter::AddSkill(uint32 skill_id)
     // Insert the pointer to the new skill inside of the global skills map and the skill type vector
     _skills.insert(std::make_pair(skill_id, skill));
     switch(skill->GetType()) {
-    case GLOBAL_SKILL_ATTACK:
-        _attack_skills.push_back(skill);
+    case GLOBAL_SKILL_WEAPON:
+        _weapon_skills.push_back(skill);
         break;
-    case GLOBAL_SKILL_SUPPORT:
-        _support_skills.push_back(skill);
+    case GLOBAL_SKILL_MAGIC:
+        _magic_skills.push_back(skill);
         break;
     case GLOBAL_SKILL_SPECIAL:
         _special_skills.push_back(skill);
         break;
     default:
-        IF_PRINT_WARNING(GLOBAL_DEBUG) << "loaded a new skill with an unknown skill type: " << skill->GetType() << std::endl;
+        PRINT_WARNING << "loaded a new skill with an unknown skill type: " << skill->GetType() << std::endl;
         break;
     }
 }
-
-
 
 void GlobalCharacter::AddNewSkillLearned(uint32 skill_id)
 {
@@ -1007,9 +1065,10 @@ void GlobalCharacter::AddNewSkillLearned(uint32 skill_id)
     }
 
     // Make sure we don't add a skill more than once
-    for(std::vector<GlobalSkill*>::iterator i = _new_skills_learned.begin(); i != _new_skills_learned.end(); i++) {
-        if(skill_id == (*i)->GetID()) {
-            IF_PRINT_WARNING(GLOBAL_DEBUG) << "the skill to add was already present in the list of newly learned skills: " << skill_id << std::endl;
+    for(std::vector<GlobalSkill*>::iterator it = _new_skills_learned.begin(); it != _new_skills_learned.end(); ++it) {
+        if(skill_id == (*it)->GetID()) {
+            IF_PRINT_WARNING(GLOBAL_DEBUG) << "the skill to add was already present in the list of newly learned skills: "
+                                           << skill_id << std::endl;
             return;
         }
     }
@@ -1018,16 +1077,38 @@ void GlobalCharacter::AddNewSkillLearned(uint32 skill_id)
 
     std::map<uint32, GlobalSkill *>::iterator skill = _skills.find(skill_id);
     if(skill == _skills.end()) {
-        IF_PRINT_WARNING(GLOBAL_DEBUG) << "failed because the new skill was not added successfully: " << skill_id << std::endl;
+        PRINT_WARNING << "failed because the new skill was not added successfully: " << skill_id << std::endl;
         return;
     }
 
     _new_skills_learned.push_back(skill->second);
 }
 
+void GlobalCharacter::_AddBareHandsSkill(uint32 skill_id)
+{
+    if(skill_id == 0) {
+        PRINT_WARNING << "function received an invalid skill_id argument: " << skill_id << std::endl;
+        return;
+    }
+    if(_skills.find(skill_id) != _skills.end()) {
+        PRINT_WARNING << "failed to add skill because the character already knew this skill: "
+            << skill_id << std::endl;
+        return;
+    }
 
+    GlobalSkill *skill = new GlobalSkill(skill_id);
+    if(!skill->IsValid()) {
+        PRINT_WARNING << "the skill to add failed to load: " << skill_id << std::endl;
+        delete skill;
+        return;
+    }
 
-hoa_video::AnimatedImage *GlobalCharacter::RetrieveBattleAnimation(const std::string &name)
+    // Insert the pointer to the new skill inside of the global skills map and the skill type vector
+    _skills.insert(std::make_pair(skill_id, skill));
+    _bare_hands_skills.push_back(skill);
+}
+
+vt_video::AnimatedImage *GlobalCharacter::RetrieveBattleAnimation(const std::string &name)
 {
     if(_battle_animation.find(name) == _battle_animation.end())
         return &_battle_animation["idle"];
@@ -1035,65 +1116,22 @@ hoa_video::AnimatedImage *GlobalCharacter::RetrieveBattleAnimation(const std::st
     return &_battle_animation.at(name);
 }
 
+void GlobalCharacter::AcknowledgeGrowth() {
+    if (!ReachedNewExperienceLevel())
+        return;
 
+    // A new experience level has been gained. Retrieve the growth data for the new experience level
+    ++_experience_level;
 
-bool GlobalCharacter::HasUnacknowledgedGrowth() const {
-    if (ReachedNewExperienceLevel() == true) {
-        return true;
+    // Retrieve the growth data for the new experience level and check for any additional growth
+    std::string filename = "dat/actors/characters.lua";
+    ReadScriptDescriptor character_script;
+    if(!character_script.OpenFile(filename)) {
+        IF_PRINT_WARNING(GLOBAL_DEBUG) << "failed to open character data file: " << filename << std::endl;
+        return;
     }
 
-    if(_hit_points_growth != 0)
-        return true;
-    if(_skill_points_growth != 0)
-        return true;
-    if(_strength_growth != 0)
-        return true;
-    if(_vigor_growth != 0)
-        return true;
-    if(_fortitude_growth != 0)
-        return true;
-    if(_protection_growth != 0)
-        return true;
-    if(_agility_growth != 0)
-        return true;
-    if(IsFloatEqual(_evade_growth, 0.0f) == false)
-        return true;
-
-    return false;
-}
-
-
-
-bool GlobalCharacter::AcknowledgeGrowth() {
-    if (HasUnacknowledgedGrowth() == false) {
-        IF_PRINT_WARNING(GLOBAL_DEBUG) << "function called when no unacknowledged growth was available" << std::endl;
-        return false;
-    }
-
-    // Add all growth stats to the character actor
-    if(_hit_points_growth != 0) {
-        AddMaxHitPoints(_hit_points_growth);
-        if (_hit_points > 0)
-            AddHitPoints(_hit_points_growth);
-    }
-    if(_skill_points_growth != 0) {
-        AddMaxSkillPoints(_skill_points_growth);
-        if (_skill_points > 0)
-            AddSkillPoints(_skill_points_growth);
-    }
-    if(_strength_growth != 0)
-        AddStrength(_strength_growth);
-    if(_vigor_growth != 0)
-        AddVigor(_vigor_growth);
-    if(_fortitude_growth != 0)
-        AddFortitude(_fortitude_growth);
-    if(_protection_growth != 0)
-        AddProtection(_protection_growth);
-    if(_agility_growth != 0)
-        AddAgility(_agility_growth);
-    if(IsFloatEqual(_evade_growth, 0.0f) == false)
-        AddEvade(_evade_growth);
-
+    // Clear the growth members before filling their data
     _hit_points_growth = 0;
     _skill_points_growth = 0;
     _strength_growth = 0;
@@ -1103,26 +1141,9 @@ bool GlobalCharacter::AcknowledgeGrowth() {
     _agility_growth = 0;
     _evade_growth = 0.0f;
 
-    if (ReachedNewExperienceLevel() == false) {
-        return false;
-    }
-
-    // A new experience level has been gained. Retrieve the growth data for the new experience level
-    _experience_level += 1;
-
-    // Retrieve the growth data for the new experience level and check for any additional growth
-    bool additional_growth_detected = false;
-    std::string filename = "dat/actors/characters.lua";
-    ReadScriptDescriptor character_script;
-    if(character_script.OpenFile(filename) == false) {
-        IF_PRINT_WARNING(GLOBAL_DEBUG) << "failed to open character data file: " << filename << std::endl;
-        return false;
-    }
-
     try {
-        ScriptCallFunction<void>(character_script.GetLuaState(), "DetermineNextLevelGrowth", this);
-        _ConstructPeriodicGrowth();
-        additional_growth_detected = _CheckForGrowth();
+        // Update Growth data and set XP for next level
+        ScriptCallFunction<void>(character_script.GetLuaState(), "DetermineLevelGrowth", this);
     } catch(const luabind::error& e) {
         ScriptManager->HandleLuaError(e);
     } catch(const luabind::cast_failed& e) {
@@ -1139,228 +1160,35 @@ bool GlobalCharacter::AcknowledgeGrowth() {
         ScriptManager->HandleCastError(e);
     }
 
+    // Add all growth stats to the character actor
+    if(_hit_points_growth != 0) {
+        AddMaxHitPoints(_hit_points_growth);
+        if (_hit_points > 0)
+            AddHitPoints(_hit_points_growth);
+    }
+
+    if(_skill_points_growth != 0) {
+        AddMaxSkillPoints(_skill_points_growth);
+        if (_skill_points > 0)
+            AddSkillPoints(_skill_points_growth);
+    }
+
+    if(_strength_growth != 0)
+        AddStrength(_strength_growth);
+    if(_vigor_growth != 0)
+        AddVigor(_vigor_growth);
+    if(_fortitude_growth != 0)
+        AddFortitude(_fortitude_growth);
+    if(_protection_growth != 0)
+        AddProtection(_protection_growth);
+    if(_agility_growth != 0)
+        AddAgility(_agility_growth);
+    if(!IsFloatEqual(_evade_growth, 0.0f))
+        AddEvade(_evade_growth);
+
     character_script.CloseFile();
-    return additional_growth_detected;
+    return;
 } // bool GlobalCharacter::AcknowledgeGrowth()
-
-
-
-bool GlobalCharacter::_CheckForGrowth()
-{
-    // ----- (1): If a new experience level is gained, empty the periodic growth containers into the growth members
-    if (ReachedNewExperienceLevel() == true) {
-        _ProcessPeriodicGrowth();
-        return true;
-    }
-
-    // ----- (2): If there is no growth detected, check all periodic growth containers
-    if (_hit_points_periodic_growth.empty() == false) {
-        if (_experience_for_next_level <= static_cast<int32>(_hit_points_periodic_growth.front().first)) {
-            _ProcessPeriodicGrowth();
-            return true;
-        }
-    }
-
-    if (_skill_points_periodic_growth.empty() == false) {
-        if (_experience_for_next_level <= static_cast<int32>(_skill_points_periodic_growth.front().first)) {
-            _ProcessPeriodicGrowth();
-            return true;
-        }
-    }
-
-    if (_strength_periodic_growth.empty() == false) {
-        if (_experience_for_next_level <= static_cast<int32>(_strength_periodic_growth.front().first)) {
-            _ProcessPeriodicGrowth();
-            return true;
-        }
-    }
-
-    if (_vigor_periodic_growth.empty() == false) {
-        if (_experience_for_next_level <= static_cast<int32>(_vigor_periodic_growth.front().first)) {
-            _ProcessPeriodicGrowth();
-            return true;
-        }
-    }
-
-    if (_fortitude_periodic_growth.empty() == false) {
-        if (_experience_for_next_level <= static_cast<int32>(_fortitude_periodic_growth.front().first)) {
-            _ProcessPeriodicGrowth();
-            return true;
-        }
-    }
-
-    if (_protection_periodic_growth.empty() == false) {
-        if (_experience_for_next_level <= static_cast<int32>(_protection_periodic_growth.front().first)) {
-            _ProcessPeriodicGrowth();
-            return true;
-        }
-    }
-
-    if (_agility_periodic_growth.empty() == false) {
-        if (_experience_for_next_level <= static_cast<int32>(_agility_periodic_growth.front().first)) {
-            _ProcessPeriodicGrowth();
-            return true;
-        }
-    }
-
-    if (_evade_periodic_growth.empty() == false) {
-        if (_experience_for_next_level <= static_cast<int32>(_evade_periodic_growth.front().first)) {
-            _ProcessPeriodicGrowth();
-            return true;
-        }
-    }
-
-    return false;
-} // bool GlobalCharacter::_CheckForGrowth()
-
-
-
-
-void GlobalCharacter::_ProcessPeriodicGrowth() {
-    // When a new level is gained, we can simply empty all of the periodic growth containers
-    if (ReachedNewExperienceLevel() == true) {
-        for (uint32 i = 0; i < _hit_points_periodic_growth.size(); i++)
-            _hit_points_growth += _hit_points_periodic_growth[i].second;
-        _hit_points_periodic_growth.clear();
-
-        for (uint32 i = 0; i < _skill_points_periodic_growth.size(); i++)
-            _skill_points_growth += _skill_points_periodic_growth[i].second;
-        _skill_points_periodic_growth.clear();
-
-        for (uint32 i = 0; i < _strength_periodic_growth.size(); i++)
-            _strength_growth += _strength_periodic_growth[i].second;
-        _strength_periodic_growth.clear();
-
-        for (uint32 i = 0; i < _vigor_periodic_growth.size(); i++)
-            _vigor_growth += _vigor_periodic_growth[i].second;
-        _vigor_periodic_growth.clear();
-
-        for (uint32 i = 0; i < _fortitude_periodic_growth.size(); i++)
-            _fortitude_growth += _fortitude_periodic_growth[i].second;
-        _fortitude_periodic_growth.clear();
-
-        for (uint32 i = 0; i < _protection_periodic_growth.size(); i++)
-            _protection_growth += _protection_periodic_growth[i].second;
-        _protection_periodic_growth.clear();
-
-        for (uint32 i = 0; i < _agility_periodic_growth.size(); i++)
-            _agility_growth += _agility_periodic_growth[i].second;
-        _agility_periodic_growth.clear();
-
-        for (uint32 i = 0; i < _evade_periodic_growth.size(); i++)
-            _evade_growth += _evade_periodic_growth[i].second;
-        _evade_periodic_growth.clear();
-    }
-    // Otherwise if no level was gained, process each growth container to deal out any growth that has been earned
-    else {
-        while (_hit_points_periodic_growth.begin() != _hit_points_periodic_growth.end()) {
-            if (_experience_for_next_level <= static_cast<int32>(_hit_points_periodic_growth.begin()->first)) {
-                _hit_points_growth += _hit_points_periodic_growth.begin()->second;
-                _hit_points_periodic_growth.pop_front();
-            }
-            else {
-                break;
-            }
-        }
-
-        while (_skill_points_periodic_growth.begin() != _skill_points_periodic_growth.end()) {
-            if (_experience_for_next_level <= static_cast<int32>(_skill_points_periodic_growth.begin()->first)) {
-                _skill_points_growth += _skill_points_periodic_growth.begin()->second;
-                _skill_points_periodic_growth.pop_front();
-            }
-            else {
-                break;
-            }
-        }
-
-        while (_strength_periodic_growth.begin() != _strength_periodic_growth.end()) {
-            if (_experience_for_next_level <= static_cast<int32>(_strength_periodic_growth.begin()->first)) {
-                _strength_growth += _strength_periodic_growth.begin()->second;
-                _strength_periodic_growth.pop_front();
-            }
-            else {
-                break;
-            }
-        }
-
-        while (_vigor_periodic_growth.begin() != _vigor_periodic_growth.end()) {
-            if (_experience_for_next_level <= static_cast<int32>(_vigor_periodic_growth.begin()->first)) {
-                _vigor_growth += _vigor_periodic_growth.begin()->second;
-                _vigor_periodic_growth.pop_front();
-            }
-            else {
-                break;
-            }
-        }
-
-        while (_fortitude_periodic_growth.begin() != _fortitude_periodic_growth.end()) {
-            if (_experience_for_next_level <= static_cast<int32>(_fortitude_periodic_growth.begin()->first)) {
-                _fortitude_growth += _fortitude_periodic_growth.begin()->second;
-                _fortitude_periodic_growth.pop_front();
-            }
-            else {
-                break;
-            }
-        }
-
-        while (_protection_periodic_growth.begin() != _protection_periodic_growth.end()) {
-            if (_experience_for_next_level <= static_cast<int32>(_protection_periodic_growth.begin()->first)) {
-                _protection_growth += _protection_periodic_growth.begin()->second;
-                _protection_periodic_growth.pop_front();
-            }
-            else {
-                break;
-            }
-        }
-
-        while (_agility_periodic_growth.begin() != _agility_periodic_growth.end()) {
-            if (_experience_for_next_level <= static_cast<int32>(_agility_periodic_growth.begin()->first)) {
-                _agility_growth += _agility_periodic_growth.begin()->second;
-                _agility_periodic_growth.pop_front();
-            }
-            else {
-                break;
-            }
-        }
-
-        while (_evade_periodic_growth.begin() != _evade_periodic_growth.end()) {
-            if (_experience_for_next_level <= static_cast<int32>(_evade_periodic_growth.begin()->first)) {
-                _evade_growth += _evade_periodic_growth.begin()->second;
-                _evade_periodic_growth.pop_front();
-            }
-            else {
-                break;
-            }
-        }
-    }
-} // void GlobalCharacter::_ProcessPeriodicGrowth()
-
-
-
-void GlobalCharacter::_ConstructPeriodicGrowth()
-{
-    // TODO: Implement a gradual growth algorithm
-
-    // TEMP: currently all growth is added when the experience level is gained
-    _hit_points_periodic_growth.push_back(std::make_pair(0, _hit_points_growth));
-    _skill_points_periodic_growth.push_back(std::make_pair(0, _skill_points_growth));
-    _strength_periodic_growth.push_back(std::make_pair(0, _strength_growth));
-    _vigor_periodic_growth.push_back(std::make_pair(0, _vigor_growth));
-    _fortitude_periodic_growth.push_back(std::make_pair(0, _fortitude_growth));
-    _protection_periodic_growth.push_back(std::make_pair(0, _protection_growth));
-    _agility_periodic_growth.push_back(std::make_pair(0, _agility_growth));
-    _evade_periodic_growth.push_back(std::make_pair(0, _evade_growth));
-
-    // Reset all growth accumulators
-    _hit_points_growth = 0;
-    _skill_points_growth = 0;
-    _strength_growth = 0;
-    _vigor_growth = 0;
-    _fortitude_growth = 0;
-    _protection_growth = 0;
-    _agility_growth = 0;
-    _evade_growth = 0.0f;
-}
 
 ////////////////////////////////////////////////////////////////////////////////
 // GlobalEnemy class
@@ -1389,30 +1217,54 @@ GlobalEnemy::GlobalEnemy(uint32 id) :
         return;
     }
 
-    enemy_data.OpenTable("enemies");
-    enemy_data.OpenTable(_id);
+    if (!enemy_data.OpenTable("enemies") || !enemy_data.OpenTable(_id)) {
+        enemy_data.CloseFile();
+        PRINT_ERROR << "Failed to open the enemies[" << _id << "] table in "
+            << filename << std::endl;
+    }
 
     // Load the enemy's name and sprite data
     _name = MakeUnicodeString(enemy_data.ReadString("name"));
-    _sprite_width = enemy_data.ReadInt("sprite_width");
-    _sprite_height = enemy_data.ReadInt("sprite_height");
 
-    // Attempt to load the MultiImage for the sprite's frames, which should contain one row and four columns of images
-    _battle_sprite_frames.assign(4, StillImage());
-    std::string sprite_filename = enemy_data.ReadString("battle_sprites");
-    if(!ImageDescriptor::LoadMultiImageFromElementGrid(_battle_sprite_frames, sprite_filename, 1, 4))
-        IF_PRINT_WARNING(GLOBAL_DEBUG) << "failed to load sprite frames for enemy: " << sprite_filename << std::endl;
+    // Attempt to load the animations for each harm levels
+    _battle_animations.assign(GLOBAL_ENEMY_HURT_TOTAL, AnimatedImage());
+    if (enemy_data.OpenTable("battle_animations" )) {
+        std::vector<uint32> animations_id;
+        std::vector<std::string> animations;
+        enemy_data.ReadTableKeys(animations_id);
+        for (uint32 i = 0; i < animations_id.size(); ++i) {
+            uint32 anim_id = animations_id[i];
+            if (anim_id >= GLOBAL_ENEMY_HURT_TOTAL) {
+                PRINT_WARNING << "Invalid table id in 'battle_animations' table for enemy: "
+                    << _id << std::endl;
+                continue;
+            }
+
+            _battle_animations[anim_id].LoadFromAnimationScript(enemy_data.ReadString(anim_id));
+
+            // Updates the sprite dimensions
+            if (_battle_animations[anim_id].GetWidth() > _sprite_width)
+                _sprite_width =_battle_animations[anim_id].GetWidth();
+            if (_battle_animations[anim_id].GetHeight() > _sprite_height)
+                _sprite_height =_battle_animations[anim_id].GetHeight();
+        }
+
+        enemy_data.CloseTable();
+    }
+    else {
+        PRINT_WARNING << "No 'battle_animations' table for enemy: " << _id << std::endl;
+    }
 
     std::string stamina_icon_filename = enemy_data.ReadString("stamina_icon");
     if(!stamina_icon_filename.empty()) {
-        if(!_stamina_icon.Load(stamina_icon_filename, 45.0f, 45.0f)) {
+        if(!_stamina_icon.Load(stamina_icon_filename)) {
             PRINT_WARNING << "Invalid stamina icon image: " << stamina_icon_filename
                           << " for enemy: " << MakeStandardString(_name) << ". Loading default one." << std::endl;
 
-            _stamina_icon.Load("img/icons/actors/default_stamina_icon.png", 45.0f, 45.0f);
+            _stamina_icon.Load("img/icons/actors/default_stamina_icon.png");
         }
     } else {
-        _stamina_icon.Load("img/icons/actors/default_stamina_icon.png", 45.0f, 45.0f);
+        _stamina_icon.Load("img/icons/actors/default_stamina_icon.png");
     }
 
     // Load the enemy's base stats
@@ -1420,50 +1272,62 @@ GlobalEnemy::GlobalEnemy(uint32 id) :
         _no_stat_randomization = enemy_data.ReadBool("no_stat_randomization");
     }
 
-    enemy_data.OpenTable("base_stats");
-    _max_hit_points = enemy_data.ReadUInt("hit_points");
-    _hit_points = _max_hit_points;
-    _max_skill_points = enemy_data.ReadUInt("skill_points");
-    _skill_points = _max_skill_points;
-    _experience_points = enemy_data.ReadUInt("experience_points");
-    _strength = enemy_data.ReadUInt("strength");
-    _vigor = enemy_data.ReadUInt("vigor");
-    _fortitude = enemy_data.ReadUInt("fortitude");
-    _protection = enemy_data.ReadUInt("protection");
-    _agility = enemy_data.ReadUInt("agility");
-    _evade = enemy_data.ReadFloat("evade");
-    _drunes_dropped = enemy_data.ReadUInt("drunes");
-    enemy_data.CloseTable();
+    // Loads enemy battle animation scripts
+    if (enemy_data.OpenTable("scripts")) {
+        _death_script_filename = enemy_data.ReadString("death");
+        enemy_data.CloseTable();
+    }
+
+    if (enemy_data.OpenTable("base_stats")) {
+        _max_hit_points = enemy_data.ReadUInt("hit_points");
+        _hit_points = _max_hit_points;
+        _max_skill_points = enemy_data.ReadUInt("skill_points");
+        _skill_points = _max_skill_points;
+        _experience_points = enemy_data.ReadUInt("experience_points");
+        _strength = enemy_data.ReadUInt("strength");
+        _vigor = enemy_data.ReadUInt("vigor");
+        _fortitude = enemy_data.ReadUInt("fortitude");
+        _protection = enemy_data.ReadUInt("protection");
+        _agility = enemy_data.ReadUInt("agility");
+        _evade = enemy_data.ReadFloat("evade");
+        _drunes_dropped = enemy_data.ReadUInt("drunes");
+        enemy_data.CloseTable();
+    }
 
     // Create the attack points for the enemy
-    enemy_data.OpenTable("attack_points");
-    uint32 ap_size = enemy_data.GetTableSize();
-    for(uint32 i = 1; i <= ap_size; i++) {
-        _attack_points.push_back(new GlobalAttackPoint(this));
-        enemy_data.OpenTable(i);
-        if(_attack_points.back()->LoadData(enemy_data) == false) {
-            IF_PRINT_WARNING(GLOBAL_DEBUG) << "failed to load data for an attack point: " << i << std::endl;
+    if (enemy_data.OpenTable("attack_points")) {
+        uint32 ap_size = enemy_data.GetTableSize();
+        for(uint32 i = 1; i <= ap_size; i++) {
+            _attack_points.push_back(new GlobalAttackPoint(this));
+            if (enemy_data.OpenTable(i)) {
+                if(_attack_points.back()->LoadData(enemy_data) == false) {
+                    IF_PRINT_WARNING(GLOBAL_DEBUG) << "failed to load data for an attack point: "
+                        << i << std::endl;
+                }
+                enemy_data.CloseTable();
+            }
         }
         enemy_data.CloseTable();
     }
-    enemy_data.CloseTable();
 
     // Add the set of skills for the enemy
-    enemy_data.OpenTable("skills");
-    for(uint32 i = 1; i <= enemy_data.GetTableSize(); i++) {
-        _skill_set.push_back(enemy_data.ReadUInt(i));
-    }
-    enemy_data.CloseTable();
-
-    // Load the possible items that the enemy may drop
-    enemy_data.OpenTable("drop_objects");
-    for(uint32 i = 1; i <= enemy_data.GetTableSize(); i++) {
-        enemy_data.OpenTable(i);
-        _dropped_objects.push_back(enemy_data.ReadUInt(1));
-        _dropped_chance.push_back(enemy_data.ReadFloat(2));
+    if (enemy_data.OpenTable("skills")) {
+        for(uint32 i = 1; i <= enemy_data.GetTableSize(); i++) {
+            _skill_set.push_back(enemy_data.ReadUInt(i));
+        }
         enemy_data.CloseTable();
     }
-    enemy_data.CloseTable();
+
+    // Load the possible items that the enemy may drop
+    if (enemy_data.OpenTable("drop_objects")) {
+        for(uint32 i = 1; i <= enemy_data.GetTableSize(); i++) {
+            enemy_data.OpenTable(i);
+            _dropped_objects.push_back(enemy_data.ReadUInt(1));
+            _dropped_chance.push_back(enemy_data.ReadFloat(2));
+            enemy_data.CloseTable();
+        }
+        enemy_data.CloseTable();
+    }
 
     enemy_data.CloseTable(); // enemies[_id]
     enemy_data.CloseTable(); // enemies
@@ -1813,4 +1677,4 @@ void GlobalParty::AddSkillPoints(uint32 sp)
     }
 }
 
-} // namespace hoa_global
+} // namespace vt_global

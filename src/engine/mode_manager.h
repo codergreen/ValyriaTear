@@ -1,5 +1,6 @@
 ///////////////////////////////////////////////////////////////////////////////
-//            Copyright (C) 2004-2010 by The Allacrost Project
+//            Copyright (C) 2004-2011 by The Allacrost Project
+//            Copyright (C) 2012-2013 by Bertram (Valyria Tear)
 //                         All Rights Reserved
 //
 // This code is licensed under the GNU GPL version 2. It is free software
@@ -10,6 +11,7 @@
 /** ***************************************************************************
 *** \file   mode_manager.h
 *** \author Tyler Olsen, roots@allacrost.org
+*** \author Yohann Ferreira, yohann ferreira orange fr
 *** \brief  Header file for game mode processing
 *** **************************************************************************/
 
@@ -21,7 +23,7 @@
 #include "engine/script_supervisor.h"
 
 //! All calls to the mode management code are wrapped inside this namespace
-namespace hoa_mode_manager
+namespace vt_mode_manager
 {
 
 class HelpWindow;
@@ -29,7 +31,7 @@ class HelpWindow;
 //! The singleton pointer responsible for maintaining and updating the game mode state.
 extern ModeEngine *ModeManager;
 
-//! Determines whether the code in the hoa_mode_manager namespace should print debug statements or not.
+//! Determines whether the code in the vt_mode_manager namespace should print debug statements or not.
 extern bool MODE_MANAGER_DEBUG;
 
 //! \name Game States/Modes
@@ -158,9 +160,9 @@ private:
 *** a stack is used. The second reason is "just in case" we need to access a stack
 *** element that is not on the top of the stack.
 *** **************************************************************************/
-class ModeEngine : public hoa_utils::Singleton<ModeEngine>
+class ModeEngine : public vt_utils::Singleton<ModeEngine>
 {
-    friend class hoa_utils::Singleton<ModeEngine>;
+    friend class vt_utils::Singleton<ModeEngine>;
 
 private:
     ModeEngine();
@@ -260,8 +262,8 @@ public:
 
     //! \brief Prints the contents of the game_stack member to standard output.
     void DEBUG_PrintStack();
-}; // class ModeEngine : public hoa_utils::Singleton<ModeEngine>
+}; // class ModeEngine : public vt_utils::Singleton<ModeEngine>
 
-} // namespace hoa_mode_manager
+} // namespace vt_mode_manager
 
 #endif

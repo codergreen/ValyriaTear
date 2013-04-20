@@ -1,5 +1,6 @@
 ////////////////////////////////////////////////////////////////////////////////
-//            Copyright (C) 2004-2010 by The Allacrost Project
+//            Copyright (C) 2004-2011 by The Allacrost Project
+//            Copyright (C) 2012-2013 by Bertram (Valyria Tear)
 //                         All Rights Reserved
 //
 // This code is licensed under the GNU GPL version 2. It is free software and
@@ -10,6 +11,7 @@
 /** ****************************************************************************
 *** \file    battle_command.cpp
 *** \author  Tyler Olsen, roots@allacrost.org
+*** \author  Yohann Ferreira, yohann ferreira orange fr
 *** \brief   Source file for battle menu windows
 *** ***************************************************************************/
 
@@ -24,16 +26,16 @@
 #include "modes/battle/battle_command.h"
 #include "modes/battle/battle_utils.h"
 
-using namespace hoa_utils;
+using namespace vt_utils;
 
-using namespace hoa_audio;
-using namespace hoa_video;
-using namespace hoa_gui;
-using namespace hoa_input;
-using namespace hoa_system;
-using namespace hoa_global;
+using namespace vt_audio;
+using namespace vt_video;
+using namespace vt_gui;
+using namespace vt_input;
+using namespace vt_system;
+using namespace vt_global;
 
-namespace hoa_battle
+namespace vt_battle
 {
 
 namespace private_battle
@@ -63,94 +65,165 @@ const uint32 TARGET_ICON_OFFSET = 288;
 
 CharacterCommandSettings::CharacterCommandSettings(BattleCharacter *character, MenuWindow &window) :
     _character(character),
-    _last_category(CATEGORY_ATTACK),
+    _last_category(CATEGORY_WEAPON),
     _last_item(0),
     _last_self_target(BattleTarget()),
     _last_character_target(BattleTarget()),
     _last_enemy_target(BattleTarget())
 {
-    _attack_list.SetOwner(&window);
-    _attack_list.SetPosition(LIST_POSITION_X, LIST_POSITION_Y);
-    _attack_list.SetDimensions(LIST_SIZE_X, LIST_SIZE_Y, 1, 255, 1, 4);
-    _attack_list.SetAlignment(VIDEO_X_LEFT, VIDEO_Y_TOP);
-    _attack_list.SetOptionAlignment(VIDEO_X_LEFT, VIDEO_Y_CENTER);
-    _attack_list.SetVerticalWrapMode(VIDEO_WRAP_MODE_STRAIGHT);
-    _attack_list.SetTextStyle(TextStyle("text20"));
-    _attack_list.SetCursorState(VIDEO_CURSOR_STATE_VISIBLE);
-    _attack_list.SetCursorOffset(-50.0f, -25.0f);
+    _weapon_skill_list.SetOwner(&window);
+    _weapon_skill_list.SetPosition(LIST_POSITION_X, LIST_POSITION_Y);
+    _weapon_skill_list.SetDimensions(LIST_SIZE_X, LIST_SIZE_Y, 1, 255, 1, 4);
+    _weapon_skill_list.SetAlignment(VIDEO_X_LEFT, VIDEO_Y_TOP);
+    _weapon_skill_list.SetOptionAlignment(VIDEO_X_LEFT, VIDEO_Y_CENTER);
+    _weapon_skill_list.SetVerticalWrapMode(VIDEO_WRAP_MODE_STRAIGHT);
+    _weapon_skill_list.SetTextStyle(TextStyle("text20"));
+    _weapon_skill_list.SetCursorState(VIDEO_CURSOR_STATE_VISIBLE);
+    _weapon_skill_list.SetCursorOffset(-50.0f, -25.0f);
 
-    _support_list.SetOwner(&window);
-    _support_list.SetPosition(LIST_POSITION_X, LIST_POSITION_Y);
-    _support_list.SetDimensions(LIST_SIZE_X, LIST_SIZE_Y, 1, 255, 1, 4);
-    _support_list.SetAlignment(VIDEO_X_LEFT, VIDEO_Y_TOP);
-    _support_list.SetOptionAlignment(VIDEO_X_LEFT, VIDEO_Y_CENTER);
-    _support_list.SetVerticalWrapMode(VIDEO_WRAP_MODE_STRAIGHT);
-    _support_list.SetTextStyle(TextStyle("text20"));
-    _support_list.SetCursorState(VIDEO_CURSOR_STATE_VISIBLE);
-    _support_list.SetCursorOffset(-50.0f, -25.0f);
+    _weapon_target_list.SetOwner(&window);
+    _weapon_target_list.SetPosition(LIST_POSITION_X + TARGET_ICON_OFFSET, LIST_POSITION_Y);
+    _weapon_target_list.SetDimensions(LIST_SIZE_X - TARGET_ICON_OFFSET, LIST_SIZE_Y, 1, 255, 1, 4);
+    _weapon_target_list.SetAlignment(VIDEO_X_LEFT, VIDEO_Y_TOP);
+    _weapon_target_list.SetOptionAlignment(VIDEO_X_LEFT, VIDEO_Y_CENTER);
+    _weapon_target_list.SetVerticalWrapMode(VIDEO_WRAP_MODE_STRAIGHT);
+    _weapon_target_list.SetTextStyle(TextStyle("text20"));
+    _weapon_target_list.SetCursorState(VIDEO_CURSOR_STATE_HIDDEN);
 
-    _special_list.SetOwner(&window);
-    _special_list.SetPosition(LIST_POSITION_X, LIST_POSITION_Y);
-    _special_list.SetDimensions(LIST_SIZE_X, LIST_SIZE_Y, 1, 255, 1, 4);
-    _special_list.SetAlignment(VIDEO_X_LEFT, VIDEO_Y_TOP);
-    _special_list.SetOptionAlignment(VIDEO_X_LEFT, VIDEO_Y_CENTER);
-    _special_list.SetVerticalWrapMode(VIDEO_WRAP_MODE_STRAIGHT);
-    _special_list.SetTextStyle(TextStyle("text20"));
-    _special_list.SetCursorState(VIDEO_CURSOR_STATE_VISIBLE);
-    _special_list.SetCursorOffset(-50.0f, -25.0f);
+    _magic_skill_list.SetOwner(&window);
+    _magic_skill_list.SetPosition(LIST_POSITION_X, LIST_POSITION_Y);
+    _magic_skill_list.SetDimensions(LIST_SIZE_X, LIST_SIZE_Y, 1, 255, 1, 4);
+    _magic_skill_list.SetAlignment(VIDEO_X_LEFT, VIDEO_Y_TOP);
+    _magic_skill_list.SetOptionAlignment(VIDEO_X_LEFT, VIDEO_Y_CENTER);
+    _magic_skill_list.SetVerticalWrapMode(VIDEO_WRAP_MODE_STRAIGHT);
+    _magic_skill_list.SetTextStyle(TextStyle("text20"));
+    _magic_skill_list.SetCursorState(VIDEO_CURSOR_STATE_VISIBLE);
+    _magic_skill_list.SetCursorOffset(-50.0f, -25.0f);
+
+    _magic_target_list.SetOwner(&window);
+    _magic_target_list.SetPosition(LIST_POSITION_X + TARGET_ICON_OFFSET, LIST_POSITION_Y);
+    _magic_target_list.SetDimensions(LIST_SIZE_X - TARGET_ICON_OFFSET, LIST_SIZE_Y, 1, 255, 1, 4);
+    _magic_target_list.SetAlignment(VIDEO_X_LEFT, VIDEO_Y_TOP);
+    _magic_target_list.SetOptionAlignment(VIDEO_X_LEFT, VIDEO_Y_CENTER);
+    _magic_target_list.SetVerticalWrapMode(VIDEO_WRAP_MODE_STRAIGHT);
+    _magic_target_list.SetTextStyle(TextStyle("text20"));
+    _magic_target_list.SetCursorState(VIDEO_CURSOR_STATE_HIDDEN);
+
+    _special_skill_list.SetOwner(&window);
+    _special_skill_list.SetPosition(LIST_POSITION_X, LIST_POSITION_Y);
+    _special_skill_list.SetDimensions(LIST_SIZE_X, LIST_SIZE_Y, 1, 255, 1, 4);
+    _special_skill_list.SetAlignment(VIDEO_X_LEFT, VIDEO_Y_TOP);
+    _special_skill_list.SetOptionAlignment(VIDEO_X_LEFT, VIDEO_Y_CENTER);
+    _special_skill_list.SetVerticalWrapMode(VIDEO_WRAP_MODE_STRAIGHT);
+    _special_skill_list.SetTextStyle(TextStyle("text20"));
+    _special_skill_list.SetCursorState(VIDEO_CURSOR_STATE_VISIBLE);
+    _special_skill_list.SetCursorOffset(-50.0f, -25.0f);
+
+    _special_target_list.SetOwner(&window);
+    _special_target_list.SetPosition(LIST_POSITION_X + TARGET_ICON_OFFSET, LIST_POSITION_Y);
+    _special_target_list.SetDimensions(LIST_SIZE_X - TARGET_ICON_OFFSET, LIST_SIZE_Y, 1, 255, 1, 4);
+    _special_target_list.SetAlignment(VIDEO_X_LEFT, VIDEO_Y_TOP);
+    _special_target_list.SetOptionAlignment(VIDEO_X_LEFT, VIDEO_Y_CENTER);
+    _special_target_list.SetVerticalWrapMode(VIDEO_WRAP_MODE_STRAIGHT);
+    _special_target_list.SetTextStyle(TextStyle("text20"));
+    _special_target_list.SetCursorState(VIDEO_CURSOR_STATE_HIDDEN);
 
     if(_character == NULL) {
         IF_PRINT_WARNING(BATTLE_DEBUG) << "constructor received NULL character pointer" << std::endl;
         return;
     }
 
-    // Construct the attack, defend, and support skill lists for the character
+    // Construct the weapon, magic, and special skill lists for the character
     std::vector<GlobalSkill *>* skill_list = NULL;
 
-    skill_list = _character->GetGlobalCharacter()->GetAttackSkills();
+    if (_character->GetWeaponEquipped())
+        skill_list = _character->GetGlobalCharacter()->GetWeaponSkills();
+    else
+        skill_list = _character->GetGlobalCharacter()->GetBareHandsSkills();
     for(uint32 i = 0; i < skill_list->size(); i++) {
-        _attack_list.AddOption(ustring());
-        _attack_list.AddOptionElementText(i, skill_list->at(i)->GetName());
-        _attack_list.AddOptionElementPosition(i, TARGET_ICON_OFFSET);
-        _attack_list.AddOptionElementImage(i, BattleMode::CurrentInstance()->GetMedia().GetTargetTypeIcon(skill_list->at(i)->GetTargetType()));
-        _attack_list.AddOptionElementAlignment(i, VIDEO_OPTION_ELEMENT_RIGHT_ALIGN);
-        _attack_list.AddOptionElementText(i, MakeUnicodeString(NumberToString(skill_list->at(i)->GetSPRequired())));
-        if(skill_list->at(i)->GetSPRequired() > _character->GetGlobalCharacter()->GetSkillPoints()) {
-            _attack_list.EnableOption(i, false);
+        _weapon_skill_list.AddOption(ustring());
+        if (!skill_list->at(i)->GetIconFilename().empty()) {
+            _weapon_skill_list.AddOptionElementImage(i, skill_list->at(i)->GetIconFilename());
+            _weapon_skill_list.GetEmbeddedImage(i)->SetHeightKeepRatio(25);
+            _weapon_skill_list.AddOptionElementPosition(i, 30);
         }
-    }
-    if(skill_list->empty() == false)
-        _attack_list.SetSelection(0);
+        else {
+            // Check for the weapon icon
+            std::string wpn_icon_filename;
+            if (_character->GetWeaponEquipped())
+                wpn_icon_filename = _character->GetWeaponEquipped()->GetIconImage().GetFilename();
+            else
+                wpn_icon_filename = "img/icons/weapons/fist-human.png";
 
-    skill_list = _character->GetGlobalCharacter()->GetSupportSkills();
-    for(uint32 i = 0; i < skill_list->size(); i++) {
-        _support_list.AddOption(ustring());
-        _support_list.AddOptionElementText(i, skill_list->at(i)->GetName());
-        _support_list.AddOptionElementPosition(i, TARGET_ICON_OFFSET);
-        _support_list.AddOptionElementImage(i, BattleMode::CurrentInstance()->GetMedia().GetTargetTypeIcon(skill_list->at(i)->GetTargetType()));
-        _support_list.AddOptionElementAlignment(i, VIDEO_OPTION_ELEMENT_RIGHT_ALIGN);
-        _support_list.AddOptionElementText(i, MakeUnicodeString(NumberToString(skill_list->at(i)->GetSPRequired())));
+            if (!wpn_icon_filename.empty()) {
+                _weapon_skill_list.AddOptionElementImage(i, wpn_icon_filename);
+                _weapon_skill_list.GetEmbeddedImage(i)->SetHeightKeepRatio(25);
+                _weapon_skill_list.AddOptionElementPosition(i, 30);
+            }
+        }
+        _weapon_skill_list.AddOptionElementText(i, skill_list->at(i)->GetName());
+
+        _weapon_target_list.AddOption(ustring());
+        _weapon_target_list.AddOptionElementImage(i, BattleMode::CurrentInstance()->GetMedia().GetTargetTypeIcon(skill_list->at(i)->GetTargetType()));
+        _weapon_target_list.AddOptionElementPosition(i, 45);
+        _weapon_target_list.AddOptionElementText(i, MakeUnicodeString(NumberToString(skill_list->at(i)->GetSPRequired())));
         if(skill_list->at(i)->GetSPRequired() > _character->GetGlobalCharacter()->GetSkillPoints()) {
-            _support_list.EnableOption(i, false);
+            _weapon_skill_list.EnableOption(i, false);
+            _weapon_target_list.EnableOption(i, false);
         }
     }
-    if(skill_list->empty() == false)
-        _support_list.SetSelection(0);
+    if(!skill_list->empty()) {
+        _weapon_skill_list.SetSelection(0);
+        _weapon_target_list.SetSelection(0);
+    }
+
+    skill_list = _character->GetGlobalCharacter()->GetMagicSkills();
+    for(uint32 i = 0; i < skill_list->size(); i++) {
+        _magic_skill_list.AddOption(ustring());
+        if (!skill_list->at(i)->GetIconFilename().empty()) {
+            _magic_skill_list.AddOptionElementImage(i, skill_list->at(i)->GetIconFilename());
+            _magic_skill_list.GetEmbeddedImage(i)->SetHeightKeepRatio(25);
+            _magic_skill_list.AddOptionElementPosition(i, 30);
+        }
+        _magic_skill_list.AddOptionElementText(i, skill_list->at(i)->GetName());
+
+        _magic_target_list.AddOption(ustring());
+        _magic_target_list.AddOptionElementImage(i, BattleMode::CurrentInstance()->GetMedia().GetTargetTypeIcon(skill_list->at(i)->GetTargetType()));
+        _magic_target_list.AddOptionElementPosition(i, 45);
+        _magic_target_list.AddOptionElementText(i, MakeUnicodeString(NumberToString(skill_list->at(i)->GetSPRequired())));
+        if(skill_list->at(i)->GetSPRequired() > _character->GetGlobalCharacter()->GetSkillPoints()) {
+            _magic_skill_list.EnableOption(i, false);
+            _magic_target_list.EnableOption(i, false);
+        }
+    }
+    if(!skill_list->empty()) {
+        _magic_skill_list.SetSelection(0);
+        _magic_target_list.SetSelection(0);
+    }
 
     skill_list = _character->GetGlobalCharacter()->GetSpecialSkills();
     for(uint32 i = 0; i < skill_list->size(); i++) {
-        _special_list.AddOption(ustring());
-        _special_list.AddOptionElementText(i, skill_list->at(i)->GetName());
-        _special_list.AddOptionElementPosition(i, TARGET_ICON_OFFSET);
-        _special_list.AddOptionElementImage(i, BattleMode::CurrentInstance()->GetMedia().GetTargetTypeIcon(skill_list->at(i)->GetTargetType()));
-        _special_list.AddOptionElementAlignment(i, VIDEO_OPTION_ELEMENT_RIGHT_ALIGN);
-        _special_list.AddOptionElementText(i, MakeUnicodeString(NumberToString(skill_list->at(i)->GetSPRequired())));
+        _special_skill_list.AddOption(ustring());
+        if (!skill_list->at(i)->GetIconFilename().empty()) {
+            _special_skill_list.AddOptionElementImage(i, skill_list->at(i)->GetIconFilename());
+            _special_skill_list.GetEmbeddedImage(i)->SetHeightKeepRatio(25);
+            _special_skill_list.AddOptionElementPosition(i, 30);
+        }
+        _special_skill_list.AddOptionElementText(i, skill_list->at(i)->GetName());
+
+        _special_target_list.AddOption(ustring());
+        _special_target_list.AddOptionElementImage(i, BattleMode::CurrentInstance()->GetMedia().GetTargetTypeIcon(skill_list->at(i)->GetTargetType()));
+        _special_target_list.AddOptionElementPosition(i, 45);
+        _special_target_list.AddOptionElementText(i, MakeUnicodeString(NumberToString(skill_list->at(i)->GetSPRequired())));
         if(skill_list->at(i)->GetSPRequired() > _character->GetGlobalCharacter()->GetSkillPoints()) {
-            _special_list.EnableOption(i, false);
+            _special_skill_list.EnableOption(i, false);
+            _special_target_list.EnableOption(i, false);
         }
     }
-    if(skill_list->empty() == false)
-        _special_list.SetSelection(0);
+    if(!skill_list->empty()) {
+        _special_skill_list.SetSelection(0);
+        _special_target_list.SetSelection(0);
+    }
 } // CharacterCommandSettings::CharacterCommandSettings(BattleCharacter* character, MenuWindow& window)
 
 
@@ -161,31 +234,43 @@ void CharacterCommandSettings::RefreshLists()
     uint32 current_sp = _character->GetSkillPoints();
     std::vector<GlobalSkill *>* skill_list = NULL;
 
-    skill_list = _character->GetGlobalCharacter()->GetAttackSkills();
-    for(uint32 i = 0; i < skill_list->size(); i++) {
+    skill_list = _character->GetGlobalCharacter()->GetWeaponSkills();
+    for(uint32 i = 0; i < skill_list->size(); ++i) {
         require_sp = skill_list->at(i)->GetSPRequired();
-        if(require_sp > current_sp)
-            _attack_list.EnableOption(i, false);
-        else
-            _attack_list.EnableOption(i, true);
+        if(require_sp > current_sp) {
+            _weapon_skill_list.EnableOption(i, false);
+            _weapon_target_list.EnableOption(i, false);
+        }
+        else {
+            _weapon_skill_list.EnableOption(i, true);
+            _weapon_target_list.EnableOption(i, true);
+        }
     }
 
-    skill_list = _character->GetGlobalCharacter()->GetSupportSkills();
-    for(uint32 i = 0; i < skill_list->size(); i++) {
+    skill_list = _character->GetGlobalCharacter()->GetMagicSkills();
+    for(uint32 i = 0; i < skill_list->size(); ++i) {
         require_sp = skill_list->at(i)->GetSPRequired();
-        if(require_sp > current_sp)
-            _support_list.EnableOption(i, false);
-        else
-            _support_list.EnableOption(i, true);
+        if(require_sp > current_sp) {
+            _magic_skill_list.EnableOption(i, false);
+            _magic_target_list.EnableOption(i, false);
+        }
+        else {
+            _magic_skill_list.EnableOption(i, true);
+            _magic_target_list.EnableOption(i, true);
+        }
     }
 
     skill_list = _character->GetGlobalCharacter()->GetSpecialSkills();
-    for(uint32 i = 0; i < skill_list->size(); i++) {
+    for(uint32 i = 0; i < skill_list->size(); ++i) {
         require_sp = skill_list->at(i)->GetSPRequired();
-        if(require_sp > current_sp)
-            _special_list.EnableOption(i, false);
-        else
-            _special_list.EnableOption(i, true);
+        if(require_sp > current_sp) {
+            _special_skill_list.EnableOption(i, false);
+            _special_target_list.EnableOption(i, false);
+        }
+        else {
+            _special_skill_list.EnableOption(i, true);
+            _special_target_list.EnableOption(i, true);
+        }
     }
 }
 
@@ -278,6 +363,15 @@ ItemCommand::ItemCommand(MenuWindow &window)
     _item_list.SetCursorState(VIDEO_CURSOR_STATE_VISIBLE);
     _item_list.SetCursorOffset(-50.0f, -25.0f);
 
+    _item_target_list.SetOwner(&window);
+    _item_target_list.SetPosition(LIST_POSITION_X + TARGET_ICON_OFFSET, LIST_POSITION_Y);
+    _item_target_list.SetDimensions(LIST_SIZE_X - TARGET_ICON_OFFSET, LIST_SIZE_Y, 1, 255, 1, 4);
+    _item_target_list.SetAlignment(VIDEO_X_LEFT, VIDEO_Y_TOP);
+    _item_target_list.SetOptionAlignment(VIDEO_X_LEFT, VIDEO_Y_CENTER);
+    _item_target_list.SetVerticalWrapMode(VIDEO_WRAP_MODE_STRAIGHT);
+    _item_target_list.SetTextStyle(TextStyle("text20"));
+    _item_target_list.SetCursorState(VIDEO_CURSOR_STATE_HIDDEN);
+
     ResetItemList();
 }
 
@@ -312,20 +406,30 @@ void ItemCommand::ConstructList()
         }
 
         _item_list.AddOption();
+        if (!_items[i].GetItem().GetIconImage().GetFilename().empty()) {
+            _item_list.AddOptionElementImage(i, _items[i].GetItem().GetIconImage().GetFilename());
+            _item_list.GetEmbeddedImage(i)->SetHeightKeepRatio(25);
+            _item_list.AddOptionElementPosition(i, 30);
+        }
         _item_list.AddOptionElementText(option_index, _items[i].GetItem().GetName());
-        _item_list.AddOptionElementPosition(option_index, TARGET_ICON_OFFSET);
-        _item_list.AddOptionElementImage(option_index, BattleMode::CurrentInstance()->GetMedia().GetTargetTypeIcon(_items[i].GetTargetType()));
-        _item_list.AddOptionElementAlignment(option_index, VIDEO_OPTION_ELEMENT_RIGHT_ALIGN);
-        _item_list.AddOptionElementText(option_index, MakeUnicodeString(NumberToString(_items[i].GetBattleCount())));
+
+        _item_target_list.AddOption(ustring());
+        _item_target_list.AddOptionElementImage(option_index, BattleMode::CurrentInstance()->GetMedia().GetTargetTypeIcon(_items[i].GetTargetType()));
+        _item_target_list.AddOptionElementPosition(option_index, 45);
+        _item_target_list.AddOptionElementText(option_index, MakeUnicodeString(NumberToString(_items[i].GetBattleCount())));
 
         _item_mappings[i] = option_index;
         option_index++;
     }
 
-    if(_item_list.GetNumberOptions() == 0)
+    if(_item_list.GetNumberOptions() == 0) {
         _item_list.SetSelection(-1);
-    else
+        _item_target_list.SetSelection(-1);
+    }
+    else {
         _item_list.SetSelection(0);
+        _item_target_list.SetSelection(0);
+    }
 }
 
 
@@ -340,6 +444,7 @@ void ItemCommand::Initialize(uint32 item_index)
     // If the item is in the list, set the list selection to that item
     if(_item_mappings[item_index] >= 0) {
         _item_list.SetSelection(_item_mappings[item_index]);
+        _item_target_list.SetSelection(_item_mappings[item_index]);
         return;
     }
 
@@ -373,8 +478,10 @@ void ItemCommand::Initialize(uint32 item_index)
         return;
     } else if((next_item_index - item_index) <= (item_index - prev_item_index)) {
         _item_list.SetSelection(_item_mappings[next_item_index]);
+        _item_target_list.SetSelection(_item_mappings[next_item_index]);
     } else {
         _item_list.SetSelection(_item_mappings[prev_item_index]);
+        _item_target_list.SetSelection(_item_mappings[prev_item_index]);
     }
 }
 
@@ -425,13 +532,16 @@ bool ItemCommand::IsSelectedItemAvailable() const
 void ItemCommand::UpdateList()
 {
     _item_list.Update();
+    _item_target_list.Update();
 
     if(InputManager->UpPress()) {
         _item_list.InputUp();
-        BattleMode::CurrentInstance()->GetMedia().cursor_sound.Play();
+        _item_target_list.InputUp();
+        GlobalManager->Media().PlaySound("confirm");
     } else if(InputManager->DownPress()) {
         _item_list.InputDown();
-        BattleMode::CurrentInstance()->GetMedia().cursor_sound.Play();
+        _item_target_list.InputDown();
+        GlobalManager->Media().PlaySound("confirm");
     }
 }
 
@@ -448,6 +558,7 @@ void ItemCommand::DrawList()
 {
     _item_header.Draw();
     _item_list.Draw();
+    _item_target_list.Draw();
 }
 
 
@@ -500,18 +611,26 @@ void ItemCommand::RefreshEntry(uint32 entry)
 
     // Clear the option and repopulate its elements
     _item_list.SetOptionText(entry, ustring());
+    if (!_items[item_index].GetItem().GetIconImage().GetFilename().empty()) {
+        _item_list.AddOptionElementImage(entry, _items[item_index].GetItem().GetIconImage().GetFilename());
+        _item_list.GetEmbeddedImage(entry)->SetHeightKeepRatio(25);
+        _item_list.AddOptionElementPosition(entry, 30);
+    }
     _item_list.AddOptionElementText(entry, _items[item_index].GetItem().GetName());
-    _item_list.AddOptionElementPosition(entry, TARGET_ICON_OFFSET);
-    _item_list.AddOptionElementImage(entry, BattleMode::CurrentInstance()->GetMedia().GetTargetTypeIcon(_items[item_index].GetTargetType()));
-    _item_list.AddOptionElementAlignment(entry, VIDEO_OPTION_ELEMENT_RIGHT_ALIGN);
-    _item_list.AddOptionElementText(entry, MakeUnicodeString(NumberToString(_items[item_index].GetBattleCount())));
+
+    _item_target_list.SetOptionText(entry, ustring());
+    _item_target_list.AddOptionElementImage(entry, BattleMode::CurrentInstance()->GetMedia().GetTargetTypeIcon(_items[item_index].GetTargetType()));
+    _item_target_list.AddOptionElementPosition(entry, 45);
+    _item_target_list.AddOptionElementText(entry, MakeUnicodeString(NumberToString(_items[item_index].GetBattleCount())));
 
     // Gray out the option when there are no items available.
     if(_items[item_index].GetBattleCount() == 0) {
         _item_list.EnableOption(entry, false);
+        _item_target_list.EnableOption(entry, false);
     } else {
         // Re-enable it if we come to get an item back for any reasons
         _item_list.EnableOption(entry, true);
+        _item_target_list.EnableOption(entry, true);
     }
 }
 
@@ -521,7 +640,8 @@ void ItemCommand::RefreshEntry(uint32 entry)
 
 SkillCommand::SkillCommand(MenuWindow &window) :
     _skills(NULL),
-    _skill_list(NULL)
+    _skill_list(NULL),
+    _target_n_cost_list(NULL)
 {
     _skill_header.SetOwner(&window);
     _skill_header.SetPosition(HEADER_POSITION_X, HEADER_POSITION_Y);
@@ -533,9 +653,9 @@ SkillCommand::SkillCommand(MenuWindow &window) :
     _skill_header.AddOption(UTranslate("Skill<R>Type SP"));
 }
 
-
-
-void SkillCommand::Initialize(std::vector<GlobalSkill *>* skills, OptionBox *skill_list)
+void SkillCommand::Initialize(std::vector<GlobalSkill *>* skills,
+                              OptionBox *skill_list,
+                              OptionBox *target_n_cost_list)
 {
     if(skills == NULL) {
         IF_PRINT_WARNING(BATTLE_DEBUG) << "function received NULL skills argument" << std::endl;
@@ -548,9 +668,8 @@ void SkillCommand::Initialize(std::vector<GlobalSkill *>* skills, OptionBox *ski
 
     _skills = skills;
     _skill_list = skill_list;
+    _target_n_cost_list = target_n_cost_list;
 }
-
-
 
 GlobalSkill *SkillCommand::GetSelectedSkill() const
 {
@@ -558,11 +677,8 @@ GlobalSkill *SkillCommand::GetSelectedSkill() const
         return NULL;
 
     uint32 selection = _skill_list->GetSelection();
-    // _skills needs to be returned even if not enabled due to low SP in order to print information
-    // of both, enabled and disabled skills.
-//	if (_skill_list->IsOptionEnabled(selection) == false)
-//		return NULL;
-//	else
+    // The skills object needs to be returned even if not enabled due to low SP
+    // in order to print information of both, enabled and disabled skills.
     return _skills->at(selection);
 }
 
@@ -585,13 +701,16 @@ void SkillCommand::UpdateList()
         return;
 
     _skill_list->Update();
+    _target_n_cost_list->Update();
 
     if(InputManager->UpPress()) {
         _skill_list->InputUp();
-        BattleMode::CurrentInstance()->GetMedia().cursor_sound.Play();
+        _target_n_cost_list->InputUp();
+        GlobalManager->Media().PlaySound("confirm");
     } else if(InputManager->DownPress()) {
         _skill_list->InputDown();
-        BattleMode::CurrentInstance()->GetMedia().cursor_sound.Play();
+        _target_n_cost_list->InputDown();
+        GlobalManager->Media().PlaySound("confirm");
     }
 }
 
@@ -611,6 +730,7 @@ void SkillCommand::DrawList()
 
     _skill_header.Draw();
     _skill_list->Draw();
+    _target_n_cost_list->Draw();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -633,9 +753,9 @@ CommandSupervisor::CommandSupervisor() :
     _command_window.Show();
 
     _category_icons.resize(4, StillImage());
-    if(_category_icons[0].Load("img/icons/battle/default_attack.png") == false)
+    if(_category_icons[0].Load("img/icons/battle/default_weapon.png") == false)
         PRINT_ERROR << "failed to load category icon" << std::endl;
-    if(_category_icons[1].Load("img/icons/battle/support.png") == false)
+    if(_category_icons[1].Load("img/icons/battle/magic.png") == false)
         PRINT_ERROR << "failed to load category icon" << std::endl;
     if(_category_icons[2].Load("img/icons/battle/default_special.png") == false)
         PRINT_ERROR << "failed to load category icon" << std::endl;
@@ -643,26 +763,26 @@ CommandSupervisor::CommandSupervisor() :
         PRINT_ERROR << "failed to load category icon" << std::endl;
 
     _category_text.resize(4, TextImage("", TextStyle("title22")));
-    _category_text[0].SetText(Translate("Attack"));
-    _category_text[1].SetText(Translate("Support"));
-    _category_text[2].SetText(Translate("??")); // Default text
+    _category_text[0].SetText(Translate("Weapon"));
+    _category_text[1].SetText(Translate("Magic"));
+    _category_text[2].SetText(""); // Default empty text
     _category_text[3].SetText(Translate("Items"));
 
     std::vector<ustring> option_text;
-    option_text.push_back(MakeUnicodeString("<img/icons/battle/default_attack.png>\n") + UTranslate("Attack"));
-    option_text.push_back(MakeUnicodeString("<img/icons/battle/support.png>\n") + UTranslate("Support"));
-    option_text.push_back(MakeUnicodeString("<img/icons/battle/default_special.png>\n") + UTranslate("??"));
-    option_text.push_back(MakeUnicodeString("<img/icons/battle/item.png>\n") + UTranslate("Items"));
+    option_text.push_back(MakeUnicodeString("<img/icons/battle/default_weapon.png>\n\n") + UTranslate("Weapon"));
+    option_text.push_back(MakeUnicodeString("<img/icons/battle/magic.png>\n\n") + UTranslate("Magic"));
+    option_text.push_back(MakeUnicodeString("")); // Special
+    option_text.push_back(MakeUnicodeString("<img/icons/battle/item.png>\n\n") + UTranslate("Items"));
 
     _window_header.SetStyle(TextStyle("title22"));
     _window_text.SetStyle(TextStyle("text20"));
 
     _category_options.SetOwner(&_command_window);
-    _category_options.SetPosition(256.0f, 55.0f);
-    _category_options.SetDimensions(400.0f, 80.0f, 4, 1, 4, 1);
+    _category_options.SetPosition(256.0f, 80.0f);
+    _category_options.SetDimensions(400.0f, 100.0f, 4, 1, 4, 1);
     _category_options.SetCursorOffset(-20.0f, -25.0f);
     _category_options.SetAlignment(VIDEO_X_CENTER, VIDEO_Y_CENTER);
-    _category_options.SetOptionAlignment(VIDEO_X_CENTER, VIDEO_Y_CENTER);
+    _category_options.SetOptionAlignment(VIDEO_X_CENTER, VIDEO_Y_TOP);
     _category_options.SetTextStyle(TextStyle("title22"));
     _category_options.SetSelectMode(VIDEO_SELECT_SINGLE);
     _category_options.SetOptions(option_text);
@@ -721,55 +841,67 @@ void CommandSupervisor::Initialize(BattleCharacter *character)
 
     // Determine which categories should be enabled or disabled
 
-    // Attack
-    if(_active_settings->GetAttackList()->GetNumberOptions() == 0) {
-        _category_options.SetOptionText(0, MakeUnicodeString("<img/icons/battle/default_attack.png>\n") + UTranslate("Attack"));
-        _category_options.EnableOption(0, false);
+    // Weapon
+    // Determine the weapon icon name
+    std::string icon_name = "<";
+
+    if (character->GetWeaponEquipped()) {
+        if (character->GetWeaponEquipped()->GetIconImage().GetFilename().empty())
+            icon_name += "img/icons/battle/default_weapon.png";
+        else
+            icon_name += character->GetWeaponEquipped()->GetIconImage().GetFilename();
     }
     else {
-        // Determine the weapon icon name
-        GlobalCharacter *gbl_char = character->GetGlobalCharacter();
+        icon_name += "img/icons/weapons/fist-human.png";
+    }
+    icon_name += ">\n\n";
 
-        std::string icon_name = "<";
-
-        if (gbl_char) {
-            if (gbl_char->GetWeaponEquipped() && !gbl_char->GetWeaponEquipped()->GetIconImage().GetFilename().empty())
-                icon_name += gbl_char->GetWeaponEquipped()->GetIconImage().GetFilename();
-            else
-                icon_name += "img/icons/weapons/fist-human.png";
-        }
-        icon_name += ">\n";
-
-        _category_options.SetOptionText(0, MakeUnicodeString(icon_name) + UTranslate("Attack"));
-        if (_category_options.GetEmbeddedImage(0))
-            _category_options.GetEmbeddedImage(0)->SetHeightKeepRatio(45);
-        _category_options.EnableOption(0, true);
+    // When a character has no basic weapon skill, we add the 'pass turn' skill instead.
+    if(character->GetWeaponEquipped()) {
+        _category_options.SetOptionText(CATEGORY_WEAPON, MakeUnicodeString(icon_name) +  UTranslate("Weapon"));
+        _category_text[CATEGORY_WEAPON].SetText(UTranslate("Weapon"));
+    }
+    else {
+        _category_options.SetOptionText(CATEGORY_WEAPON, MakeUnicodeString(icon_name) +  UTranslate("Bare-hand"));
+        _category_text[CATEGORY_WEAPON].SetText(UTranslate("Bare-hand"));
     }
 
-    // Support
-    if(_active_settings->GetSupportList()->GetNumberOptions() == 0)
-        _category_options.EnableOption(1, false);
+    // If there are no skills, disable it, and print a warning
+    if (_active_settings->GetWeaponSkillList()->GetNumberOptions() == 0) {
+        _category_options.EnableOption(CATEGORY_WEAPON, false);
+        PRINT_WARNING << "No weapon or bare hand skills, the battle might get stuck" << std::endl;
+    }
+
+    // Magic
+    if(_active_settings->GetMagicSkillList()->GetNumberOptions() == 0)
+        _category_options.EnableOption(CATEGORY_MAGIC, false);
     else
-        _category_options.EnableOption(1, true);
+        _category_options.EnableOption(CATEGORY_MAGIC, true);
 
     // Special
-    if(_active_settings->GetSpecialList()->GetNumberOptions() == 0) {
-        _category_options.SetOptionText(2, MakeUnicodeString("<img/icons/battle/default_special.png>\n") + UTranslate("??"));
-        _category_options.EnableOption(2, false);
-        _category_text[2].SetText(Translate("??"));
+    if(_active_settings->GetSpecialSkillList()->GetNumberOptions() == 0) {
+        _category_options.SetOptionText(CATEGORY_SPECIAL, MakeUnicodeString(""));
+        _category_options.EnableOption(CATEGORY_SPECIAL, false);
+        _category_text[CATEGORY_SPECIAL].SetText("");
     }
     else {
-        // TODO: Set actual icon from character config.
-        _category_options.SetOptionText(2, MakeUnicodeString("<img/icons/battle/default_special.png>\n") + UTranslate("Special"));
-        _category_options.EnableOption(2, true);
-        _category_text[2].SetText(Translate("Special")); //TODO: Use actual name from character config
+        // Set icon from character config.
+        std::string special_icon = character->GetGlobalCharacter()->GetSpecialCategoryIconFilename();
+        if (special_icon.empty())
+            special_icon = "img/icons/battle/default_special.png";
+
+        vt_utils::ustring special_name = character->GetGlobalCharacter()->GetSpecialCategoryName();
+        _category_options.SetOptionText(CATEGORY_SPECIAL, MakeUnicodeString("<" + special_icon + ">\n\n") + special_name);
+        _category_options.EnableOption(CATEGORY_SPECIAL, true);
+        // Use special name from character config
+        _category_text[CATEGORY_SPECIAL].SetText(special_name);
     }
 
     // Items
     if(_item_command.GetNumberListOptions() == 0)
-        _category_options.EnableOption(3, false);
+        _category_options.EnableOption(CATEGORY_ITEM, false);
     else
-        _category_options.EnableOption(3, true);
+        _category_options.EnableOption(CATEGORY_ITEM, true);
 
     // Warn if there are no enabled options in the category list
     for(uint32 i = 0; i < _category_options.GetNumberOptions(); i++) {
@@ -777,7 +909,7 @@ void CommandSupervisor::Initialize(BattleCharacter *character)
             return;
     }
 
-    IF_PRINT_WARNING(BATTLE_DEBUG) << "no options in category list were enabled" << std::endl;
+    PRINT_ERROR << "No category options were enabled. The game might be stuck." << std::endl;
 }
 
 
@@ -851,13 +983,13 @@ void CommandSupervisor::NotifyActorDeath(BattleActor *actor)
     // If the character currently selecting a command dies, we get out.
     if(character == actor) {
         _ChangeState(COMMAND_STATE_INVALID);
-        BattleMode::CurrentInstance()->GetMedia().cancel_sound.Play();
+        GlobalManager->Media().PlaySound("cancel");
         return;
     }
 
     // Update the selected target if the target is the actor who just deceased
     if(_selected_target.GetActor() == actor) {
-        BattleMode::CurrentInstance()->GetMedia().cancel_sound.Play();
+        GlobalManager->Media().PlaySound("cancel");
 
         // Try selecting the next actor and fall back to the previous command menu
         // if not possible.
@@ -873,8 +1005,8 @@ void CommandSupervisor::NotifyActorDeath(BattleActor *actor)
 
 bool CommandSupervisor::_IsSkillCategorySelected() const
 {
-    uint32 category = _category_options.GetSelection();
-    if((category == CATEGORY_ATTACK) || (category == CATEGORY_SUPPORT) || (category == CATEGORY_SPECIAL))
+    int32 category = _category_options.GetSelection();
+    if((category == CATEGORY_WEAPON) || (category == CATEGORY_MAGIC) || (category == CATEGORY_SPECIAL))
         return true;
     else
         return false;
@@ -884,7 +1016,7 @@ bool CommandSupervisor::_IsSkillCategorySelected() const
 
 bool CommandSupervisor::_IsItemCategorySelected() const
 {
-    uint32 category = _category_options.GetSelection();
+    int32 category = _category_options.GetSelection();
     if(category == CATEGORY_ITEM)
         return true;
     else
@@ -947,7 +1079,7 @@ bool CommandSupervisor::_SetInitialTarget()
         if(!_selected_target.SetInitialTarget(user, target_type)) {
             // No more target of that type, let's go back to the command state
             _selected_target.InvalidateTarget();
-            BattleMode::CurrentInstance()->GetMedia().cancel_sound.Play();
+            GlobalManager->Media().PlaySound("cancel");
             return false;
         }
     }
@@ -981,14 +1113,23 @@ void CommandSupervisor::_ChangeState(COMMAND_STATE new_state)
         // Construct the appropriate skill or item selection list if we're coming from the category state
         if(_state == COMMAND_STATE_CATEGORY) {
             switch(_category_options.GetSelection()) {
-            case CATEGORY_ATTACK:
-                _skill_command.Initialize(GetCommandCharacter()->GetGlobalCharacter()->GetAttackSkills(), _active_settings->GetAttackList());
+            case CATEGORY_WEAPON:
+                if (GetCommandCharacter()->GetWeaponEquipped()) {
+                    _skill_command.Initialize(GetCommandCharacter()->GetGlobalCharacter()->GetWeaponSkills(),
+                                              _active_settings->GetWeaponSkillList(), _active_settings->GetWeaponTargetList());
+                }
+                else {
+                    _skill_command.Initialize(GetCommandCharacter()->GetGlobalCharacter()->GetBareHandsSkills(),
+                                              _active_settings->GetWeaponSkillList(), _active_settings->GetWeaponTargetList());
+                }
                 break;
-            case CATEGORY_SUPPORT:
-                _skill_command.Initialize(GetCommandCharacter()->GetGlobalCharacter()->GetSupportSkills(), _active_settings->GetSupportList());
+            case CATEGORY_MAGIC:
+                _skill_command.Initialize(GetCommandCharacter()->GetGlobalCharacter()->GetMagicSkills(),
+                                          _active_settings->GetMagicSkillList(), _active_settings->GetMagicTargetList());
                 break;
             case CATEGORY_SPECIAL:
-                _skill_command.Initialize(GetCommandCharacter()->GetGlobalCharacter()->GetSpecialSkills(), _active_settings->GetSpecialList());
+                _skill_command.Initialize(GetCommandCharacter()->GetGlobalCharacter()->GetSpecialSkills(),
+                                          _active_settings->GetSpecialSkillList(), _active_settings->GetSpecialTargetList());
                 break;
             case CATEGORY_ITEM:
                 _item_command.Initialize(_active_settings->GetLastItem());
@@ -1003,7 +1144,7 @@ void CommandSupervisor::_ChangeState(COMMAND_STATE new_state)
         // Set the initial target if we're coming from the action selection state
         if(_state == COMMAND_STATE_ACTION) {
             if(!_SetInitialTarget()) {
-                BattleMode::CurrentInstance()->GetMedia().cancel_sound.Play();
+                GlobalManager->Media().PlaySound("cancel");
                 return;
             }
         }
@@ -1032,32 +1173,32 @@ void CommandSupervisor::_UpdateCategory()
         // is allowed to continue.
         if((BM->GetBattleType() == BATTLE_TYPE_WAIT || BM->GetBattleType() == BATTLE_TYPE_SEMI_ACTIVE)
             && (GetCommandCharacter()->GetState() == ACTOR_STATE_COMMAND)) {
-            BM->GetMedia().cancel_sound.Play();
+            GlobalManager->Media().PlaySound("cancel");
         } else {
             _ChangeState(COMMAND_STATE_INVALID);
             BM->NotifyCommandCancel();
-            BM->GetMedia().cancel_sound.Play();
+            GlobalManager->Media().PlaySound("cancel");
         }
     }
 
     else if(InputManager->ConfirmPress()) {
-        if(_category_options.IsOptionEnabled(_category_options.GetSelection()) == true) {
+        if(_category_options.IsOptionEnabled(_category_options.GetSelection())) {
             _active_settings->SetLastCategory(_category_options.GetSelection());
             _ChangeState(COMMAND_STATE_ACTION);
-            BattleMode::CurrentInstance()->GetMedia().confirm_sound.Play();
+            GlobalManager->Media().PlaySound("confirm");
         } else {
-            BattleMode::CurrentInstance()->GetMedia().invalid_sound.Play();
+            GlobalManager->Media().PlaySound("cancel");
         }
     }
 
     else if(InputManager->LeftPress()) {
         _category_options.InputLeft();
-        BattleMode::CurrentInstance()->GetMedia().cursor_sound.Play();
+        GlobalManager->Media().PlaySound("confirm");
     }
 
     else if(InputManager->RightPress()) {
         _category_options.InputRight();
-        BattleMode::CurrentInstance()->GetMedia().cursor_sound.Play();
+        GlobalManager->Media().PlaySound("confirm");
     }
 }
 
@@ -1067,7 +1208,7 @@ void CommandSupervisor::_UpdateAction()
 {
     if(InputManager->CancelPress()) {
         _ChangeState(COMMAND_STATE_CATEGORY);
-        BattleMode::CurrentInstance()->GetMedia().cancel_sound.Play();
+        GlobalManager->Media().PlaySound("cancel");
         return;
     }
 
@@ -1078,15 +1219,15 @@ void CommandSupervisor::_UpdateAction()
             bool is_skill_enabled = _skill_command.GetSelectedSkillEnabled();
             if(is_skill_enabled == true) {
                 _ChangeState(COMMAND_STATE_ACTOR);
-                BattleMode::CurrentInstance()->GetMedia().confirm_sound.Play();
+                GlobalManager->Media().PlaySound("confirm");
             } else {
-                BattleMode::CurrentInstance()->GetMedia().invalid_sound.Play();
+                GlobalManager->Media().PlaySound("cancel");
             }
         }
 
         else if(InputManager->MenuPress()) {
             _ChangeState(COMMAND_STATE_INFORMATION);
-            BattleMode::CurrentInstance()->GetMedia().confirm_sound.Play();
+            GlobalManager->Media().PlaySound("confirm");
         }
 
         else {
@@ -1099,15 +1240,15 @@ void CommandSupervisor::_UpdateAction()
             // Permit the selection only where are items left.
             if(_selected_item != NULL && _item_command.IsSelectedItemAvailable()) {
                 _ChangeState(COMMAND_STATE_ACTOR);
-                BattleMode::CurrentInstance()->GetMedia().confirm_sound.Play();
+                GlobalManager->Media().PlaySound("confirm");
             } else {
-                BattleMode::CurrentInstance()->GetMedia().invalid_sound.Play();
+                GlobalManager->Media().PlaySound("cancel");
             }
         }
 
         else if(InputManager->MenuPress()) {
             _ChangeState(COMMAND_STATE_INFORMATION);
-            BattleMode::CurrentInstance()->GetMedia().confirm_sound.Play();
+            GlobalManager->Media().PlaySound("confirm");
         }
 
         else {
@@ -1116,7 +1257,7 @@ void CommandSupervisor::_UpdateAction()
     } else {
         IF_PRINT_WARNING(BATTLE_DEBUG) << "invalid category selection: " << _category_options.GetSelection() << std::endl;
         _state = COMMAND_STATE_CATEGORY;
-        _category_options.SetSelection(0);
+        _category_options.SetSelection(CATEGORY_WEAPON);
     }
 }
 
@@ -1126,7 +1267,7 @@ void CommandSupervisor::_UpdateActorTarget()
 {
     if(InputManager->CancelPress()) {
         _ChangeState(COMMAND_STATE_ACTION);
-        BattleMode::CurrentInstance()->GetMedia().cancel_sound.Play();
+        GlobalManager->Media().PlaySound("cancel");
     }
 
     else if(InputManager->ConfirmPress()) {
@@ -1149,7 +1290,7 @@ void CommandSupervisor::_UpdateActorTarget()
         if((IsTargetActor(_selected_target.GetType()) == true) || (IsTargetPoint(_selected_target.GetType()) == true)) {
             _selected_target.SelectNextActor(GetCommandCharacter(), direction, true, permit_dead_targets);
             _CreateActorTargetText();
-            BattleMode::CurrentInstance()->GetMedia().cursor_sound.Play();
+            GlobalManager->Media().PlaySound("confirm");
         }
     }
 }
@@ -1160,7 +1301,7 @@ void CommandSupervisor::_UpdateAttackPointTarget()
 {
     if(InputManager->CancelPress()) {
         _ChangeState(COMMAND_STATE_ACTOR);
-        BattleMode::CurrentInstance()->GetMedia().cancel_sound.Play();
+        GlobalManager->Media().PlaySound("cancel");
     }
 
     else if(InputManager->ConfirmPress()
@@ -1176,7 +1317,7 @@ void CommandSupervisor::_UpdateAttackPointTarget()
 
         _selected_target.SelectNextPoint(GetCommandCharacter(), InputManager->DownPress());
         _CreateAttackPointTargetText();
-        BattleMode::CurrentInstance()->GetMedia().cursor_sound.Play();
+        GlobalManager->Media().PlaySound("confirm");
     }
 }
 
@@ -1186,12 +1327,12 @@ void CommandSupervisor::_UpdateInformation()
 {
     if(InputManager->CancelPress() || InputManager->MenuPress()) {
         _state = COMMAND_STATE_ACTION;
-        BattleMode::CurrentInstance()->GetMedia().cancel_sound.Play();
+        GlobalManager->Media().PlaySound("cancel");
     }
 
     else if(InputManager->ConfirmPress()) {
         _ChangeState(COMMAND_STATE_ACTOR);
-        BattleMode::CurrentInstance()->GetMedia().cancel_sound.Play();
+        GlobalManager->Media().PlaySound("cancel");
     }
 
     // Change selected skill/item and update the information text
@@ -1200,11 +1341,11 @@ void CommandSupervisor::_UpdateInformation()
         if(_IsSkillCategorySelected() == true) {
             _skill_command.UpdateList();
             _selected_skill = _skill_command.GetSelectedSkill();
-            BattleMode::CurrentInstance()->GetMedia().cursor_sound.Play();
+            GlobalManager->Media().PlaySound("confirm");
         } else if(_IsItemCategorySelected() == true) {
             _item_command.UpdateList();
             _selected_item = _item_command.GetSelectedItem();
-            BattleMode::CurrentInstance()->GetMedia().cursor_sound.Play();
+            GlobalManager->Media().PlaySound("confirm");
         }
 
         _CreateInformationText();
@@ -1400,9 +1541,9 @@ void CommandSupervisor::_FinalizeCommand()
 
     _ChangeState(COMMAND_STATE_INVALID);
     BattleMode::CurrentInstance()->NotifyCharacterCommandComplete(character);
-    BattleMode::CurrentInstance()->GetMedia().finish_sound.Play();
+    GlobalManager->Media().PlaySound("confirm");
 }
 
 } // namespace private_battle
 
-} // namespace hoa_battle
+} // namespace vt_battle

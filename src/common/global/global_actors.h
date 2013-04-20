@@ -1,5 +1,6 @@
 ////////////////////////////////////////////////////////////////////////////////
-//            Copyright (C) 2004-2010 by The Allacrost Project
+//            Copyright (C) 2004-2011 by The Allacrost Project
+//            Copyright (C) 2012-2013 by Bertram (Valyria Tear)
 //                         All Rights Reserved
 //
 // This code is licensed under the GNU GPL version 2. It is free software
@@ -10,6 +11,7 @@
 /** ****************************************************************************
 *** \file    global_actors.h
 *** \author  Tyler Olsen, roots@allacrost.org
+*** \author  Yohann Ferreira, yohann ferreira orange fr
 *** \brief   Header file for global game actors
 ***
 *** This file contains the implementation of "actors", which are living entities
@@ -35,17 +37,17 @@
 *** This method should <b>only be called once</b>. It must be called after the
 *** ScriptEngine is initialized, otherwise the application will crash.
 **/
-namespace hoa_defs
+namespace vt_defs
 {
 void BindCommonCode();
 }
 
-namespace hoa_script
+namespace vt_script
 {
 class ReadScriptDescriptor;
 }
 
-namespace hoa_global
+namespace vt_global
 {
 
 class GlobalActor;
@@ -83,7 +85,7 @@ public:
     *** table containing the attack point when it finishes loading the data, so the calling routine
     *** must remember to close the table after this call is made.
     **/
-    bool LoadData(hoa_script::ReadScriptDescriptor &script);
+    bool LoadData(vt_script::ReadScriptDescriptor &script);
 
     /** \brief Determines the total physical and magical defense of the attack point
     *** \param equipped_armor A pointer to the armor equipped on the attack point, or NULL if no armor is equipped
@@ -104,7 +106,7 @@ public:
 
     //! \name Class Member Access Functions
     //@{
-    hoa_utils::ustring &GetName() {
+    vt_utils::ustring &GetName() {
         return _name;
     }
 
@@ -159,7 +161,7 @@ private:
     *** Usually, this is simply the name of a body part such as "head" or "tail". More elaborate names
     *** may be chosen for special foes and bosses, however.
     **/
-    hoa_utils::ustring _name;
+    vt_utils::ustring _name;
 
     //! \brief A pointer to the actor which "owns" this attack point (i.e., the attack point is a location on the actor)
     GlobalActor *_actor_owner;
@@ -271,7 +273,7 @@ public:
         return _id;
     }
 
-    hoa_utils::ustring &GetName() {
+    vt_utils::ustring &GetName() {
         return _name;
     }
 
@@ -279,15 +281,15 @@ public:
         return _map_sprite_name;
     }
 
-    hoa_video::StillImage &GetPortrait() {
+    vt_video::StillImage &GetPortrait() {
         return _portrait;
     }
 
-    hoa_video::StillImage &GetFullPortrait() {
+    vt_video::StillImage &GetFullPortrait() {
         return _full_portrait;
     }
 
-    hoa_video::StillImage &GetStaminaIcon() {
+    vt_video::StillImage &GetStaminaIcon() {
         return _stamina_icon;
     }
 
@@ -353,6 +355,13 @@ public:
 
     float GetTotalEvadeRating(uint32 index) const;
 
+    /** \brief Returns the average defense/evasion totals
+    *** of all of the actor's attack points. It used against global attacks.
+    **/
+    uint32 GetAverageDefense();
+    uint32 GetAverageMagicalDefense();
+    float GetAverageEvadeRating();
+
     GlobalWeapon *GetWeaponEquipped() const {
         return _weapon_equipped;
     }
@@ -366,6 +375,9 @@ public:
     const std::vector<GlobalAttackPoint *>& GetAttackPoints() {
         return _attack_points;
     }
+
+    //! \brief Tells whether the actor has got equipment.
+    bool HasEquipment() const;
 
     GlobalAttackPoint *GetAttackPoint(uint32 index) const;
 
@@ -521,19 +533,19 @@ protected:
     uint32 _id;
 
     //! \brief The name of the actor as it will be displayed on the screen
-    hoa_utils::ustring _name;
+    vt_utils::ustring _name;
 
     //! \brief Used to know the sprite linked to the character in map mode.
     std::string _map_sprite_name;
 
     //! \brief The character portrait
-    hoa_video::StillImage _portrait;
+    vt_video::StillImage _portrait;
 
     //! \brief The character full pose portrait
-    hoa_video::StillImage _full_portrait;
+    vt_video::StillImage _full_portrait;
 
     //! \brief The character stamina icon
-    hoa_video::StillImage _stamina_icon;
+    vt_video::StillImage _stamina_icon;
 
     //! \name Base Actor Statistics
     //@{
@@ -700,12 +712,12 @@ protected:
 *** ***************************************************************************/
 class GlobalCharacter : public GlobalActor
 {
-    friend void hoa_defs::BindCommonCode();
+    friend void vt_defs::BindCommonCode();
     // TODO: investigate whether we can replace declaring the entire GameGlobal class as a friend with declaring
     // the GameGlobal::_SaveCharacter and GameGlobal::_LoadCharacter methods instead.
     friend class GameGlobal;
-//     friend void GameGlobal::_SaveCharacter(hoa_script::WriteScriptDescriptor &file, GlobalCharacter *character, bool last);
-//     friend void GameGlobal::_LoadCharacter(hoa_script::ReadScriptDescriptor &file, uint32 id);
+//     friend void GameGlobal::_SaveCharacter(vt_script::WriteScriptDescriptor &file, GlobalCharacter *character, bool last);
+//     friend void GameGlobal::_LoadCharacter(vt_script::ReadScriptDescriptor &file, uint32 id);
 public:
     /** \brief Constructs a new character from its definition in a script file
     *** \param id The integer ID of the character to create
@@ -765,10 +777,7 @@ public:
 
     //! \brief Returns true if the character has earned enough experience points to reach the next level
     bool ReachedNewExperienceLevel() const
-        { return _experience_for_next_level <= 0; }
-
-    //! \brief Returns true if the character has outstanding growth that has not been acknowledged
-    bool HasUnacknowledgedGrowth() const;
+    { return _experience_for_next_level <= 0; }
 
     /** \brief Adds any growth that has occured by modifying the character's stats
     *** \return True if additional growth is detected and requires another AcknowledgeGrowth() call.
@@ -776,14 +785,13 @@ public:
     *** If an experience level is gained, this function will open up the script file that contains
     *** the character's definition and get new growth stats for the next experience level. Often this
     *** requires another call to this function to process growth that has occurred after the level
-    *** was gained. It is a good idea to put calls to this function in a loop to process all growth
-    *** (ie, while (AcknowledgeGrowth() != false)).
+    *** was gained.
     ***
     *** \note If multiple experience levels were gained as a result of adding a large amount of XP, this
     *** function will only increment the experience level by one. In the case where multiple levels are
     *** gained, this function will need to be called once for each level up.
     **/
-    bool AcknowledgeGrowth();
+    void AcknowledgeGrowth();
 
     //! \name Public Member Access Functions
     //@{
@@ -816,12 +824,17 @@ public:
         return _armor_equipped[GLOBAL_POSITION_LEGS];
     }
 
-    std::vector<GlobalSkill *>* GetAttackSkills() {
-        return &_attack_skills;
+    std::vector<GlobalSkill *>* GetWeaponSkills() {
+        return &_weapon_skills;
     }
 
-    std::vector<GlobalSkill *>* GetSupportSkills() {
-        return &_support_skills;
+    //! \brief Gets the skills useable when the character hasn't got any weapon.
+    std::vector<GlobalSkill *>* GetBareHandsSkills() {
+        return &_bare_hands_skills;
+    }
+
+    std::vector<GlobalSkill *>* GetMagicSkills() {
+        return &_magic_skills;
     }
 
     std::vector<GlobalSkill *>* GetSpecialSkills() {
@@ -867,24 +880,39 @@ public:
 
     //! Image accessor functions
     //@{
-    hoa_video::AnimatedImage *RetrieveBattleAnimation(const std::string &name);
+    //! \brief Returns the corresponding battle character sprite animation
+    vt_video::AnimatedImage *RetrieveBattleAnimation(const std::string &name);
 
-    std::vector<hoa_video::StillImage>* GetBattlePortraits() {
+    //! \brief Returns the corresponding battle **weapon** sprite animation
+    //! Usually displayed on top of the sprite to make it look like holding it.
+    vt_video::AnimatedImage *RetrieveWeaponAnimation(const std::string &name);
+
+    std::vector<vt_video::StillImage>* GetBattlePortraits() {
         return &_battle_portraits;
+    }
+
+    const vt_utils::ustring& GetSpecialCategoryName() const {
+        return _special_category_name;
+    }
+
+    const std::string& GetSpecialCategoryIconFilename() const {
+        return _special_category_icon;
     }
     //@}
 
 protected:
     /** \brief Sortable skill containers
-    *** Skills are divided into three types: attack, defense, and support. There is really no functional
+    *** Skills are divided into three types: weapon, magic, and special. There is really no functional
     *** distinguishment between the various skill types, they just serve an organizational means and are
     *** used to identify a skill's general purpose/use. Characters keep their skills in these seperate
     *** containers because they are presented in this way to the player.
     **/
     //@{
-    std::vector<GlobalSkill *> _attack_skills;
-    std::vector<GlobalSkill *> _support_skills;
+    std::vector<GlobalSkill *> _weapon_skills;
+    std::vector<GlobalSkill *> _magic_skills;
     std::vector<GlobalSkill *> _special_skills;
+    // Skills available when no weapons
+    std::vector<GlobalSkill *> _bare_hands_skills;
     //@}
 
     //! \brief The script filename used to trigger a battle character animation when dealing with a particular skill.
@@ -901,13 +929,13 @@ protected:
     *** The standard map portrait is ususally used in dialogues, but may also be used in other modes where
     *** appropriate.
     **/
-    hoa_video::StillImage _map_portrait_standard;
+    vt_video::StillImage _map_portrait_standard;
 
     /** \brief The frame images for the character's battle sprite.
     *** This map container contains various animated images for the character's battle sprites. The key to the
     *** map is a simple string which describes the animation, such as "idle".
     **/
-    std::map<std::string, hoa_video::AnimatedImage> _battle_animation;
+    std::map<std::string, vt_video::AnimatedImage> _battle_animation;
 
     /** \brief The frame images for the character's battle portrait
     *** Each character has 5 battle portraits which represent the character's health with damage levels of 0%,
@@ -915,17 +943,25 @@ protected:
     *** frame at index 0). Thus, the size of this vector is always five elements. Each portait is 100x100
     *** pixels in size.
     **/
-    std::vector<hoa_video::StillImage> _battle_portraits;
+    std::vector<vt_video::StillImage> _battle_portraits;
 
     /** \brief The character's full-body portrait image for use in menu mode
     *** This image is a detailed, full-scale portait of the character and is intended for use in menu mode.
     *** The size of the image is 150x350 pixels.
     **/
-    hoa_video::StillImage _menu_portrait;
+    vt_video::StillImage _menu_portrait;
     //@}
+
+    //! \brief The special skills category name and icon
+    //! Used in battles to show the corresponding name and icon.
+    vt_utils::ustring _special_category_name;
+    std::string _special_category_icon;
 
     //! \brief Tells whether a character is in the visible game formation
     bool _enabled;
+
+    //! \brief Add a skill available only when the character has got no weapons.
+    void _AddBareHandsSkill(uint32 skill_id);
 
 private:
     /** \brief The remaining experience points required to reach the next experience level
@@ -946,7 +982,7 @@ private:
     *** a call to AcknowledgeGrowth().
     ***
     *** \note These members are given read/write access in Lua so that Lua may use them to hold new
-    *** growth amounts when a character reaches a new level. Refer to the function DetermineNextLevelGrowth(character)
+    *** growth amounts when a character reaches a new level. Refer to the function DetermineLevelGrowth(character)
     *** defined in dat/actors/characters.lua
     **/
     //@{
@@ -958,29 +994,6 @@ private:
     uint32 _protection_growth;
     uint32 _agility_growth;
     float _evade_growth;
-    //@}
-
-    /** \brief The periodic growth of the stats as a function of experience points
-    *** The purpose of these containers is to support the gradual growth of characters.
-    *** The first member in each pair is the experience points required for that growth
-    *** to occur, while the second member is the value of the growth. Each entry in the
-    *** deques are ordered from lowest (front) to highest (back) XP requirements. The
-    *** final entry in each deque should be the growth for when the next experience
-    *** level is reached. Note that these structures do not need to contain any entries
-    *** (ie, a stat does not need to grow on every level).
-    ***
-    *** These containers are emptied when a new experience level occurs, and are also
-    *** re-constructed after the experience level gain has been acknowledged.
-    **/
-    //@{
-    std::deque<std::pair<uint32, uint32> > _hit_points_periodic_growth;
-    std::deque<std::pair<uint32, uint32> > _skill_points_periodic_growth;
-    std::deque<std::pair<uint32, uint32> > _strength_periodic_growth;
-    std::deque<std::pair<uint32, uint32> > _vigor_periodic_growth;
-    std::deque<std::pair<uint32, uint32> > _fortitude_periodic_growth;
-    std::deque<std::pair<uint32, uint32> > _protection_periodic_growth;
-    std::deque<std::pair<uint32, uint32> > _agility_periodic_growth;
-    std::deque<std::pair<uint32, float> > _evade_periodic_growth;
     //@}
 
     /** \brief Contains pointers to all skills that were learned by achieving the current experience level
@@ -1001,34 +1014,6 @@ private:
     **/
     std::vector<GlobalSkill*> _new_skills_learned;
 
-    /** \brief Examines if any growth has occured as a result of the character's experience points
-    *** \return True if any amount of growth has occurred, false if no growth has occurred.
-    ***
-    *** This is called by GlobalCharacter whenever the character's experience points change. If any growth is
-    *** detected, _ProcessPeriodicGrowth() is called and the various growth members of the class are incremented
-    *** by the growth amount.
-    **/
-    bool _CheckForGrowth();
-
-    /** \brief Removes acquired growth from the periodic growth containers and accumulating it in the growth members
-    ***
-    *** This method should be called whenever any amount of growth in any stat has been detected. There is no harm in
-    *** invoking this method when no growth has occurred, however it will do nothing but waste time in this case.
-    **/
-    void _ProcessPeriodicGrowth();
-
-    /** \brief Constructs the numerous periodic growth deques when growth stats for a new level are loaded in
-    *** After new growth stats have been loaded in for a level, this function takes those values, breaks them
-    *** apart, and spreads out their growth periodically. 50% of the growth is saved for when the character
-    *** reaches a new level, while the other 50% are rewarded as the character's experience grows to values
-    *** in between the previous experience level marker and the next.
-    ***
-    *** \note The growth members should contain the total growth stats when this function is called. These
-    *** members will be set back to zero before the function returns as their values will be split up
-    *** and placed across numerous entries in the periodic_growth containers. All periodic_growth deques should be
-    *** empty when this function is called.
-    **/
-    void _ConstructPeriodicGrowth();
 }; // class GlobalCharacter : public GlobalActor
 
 
@@ -1105,8 +1090,12 @@ public:
         return _sprite_height;
     }
 
-    std::vector<hoa_video::StillImage>* GetBattleSpriteFrames() {
-        return &_battle_sprite_frames;
+    std::vector<vt_video::AnimatedImage>* GetBattleAnimations() {
+        return &_battle_animations;
+    }
+
+    const std::string& GetDeathScriptFilename() const {
+        return _death_script_filename;
     }
     //@}
 
@@ -1136,12 +1125,15 @@ protected:
     **/
     std::vector<uint32> _skill_set;
 
-    /** \brief The battle sprite frame images for the enemy
-    *** Each enemy has four frames representing damage levels of 0%, 33%, 66%, and 100%. This vector thus
+    /** \brief The battle sprite animations for the enemy
+    *** Each enemy has four animations representing damage levels of 0%, 33%, 66%, and 100%. This vector thus
     *** always has a size of four holding each of these image frames. The first element contains the 0%
     *** damage frame, the second element contains the 33% damage frame, and so on.
     **/
-    std::vector<hoa_video::StillImage> _battle_sprite_frames;
+    std::vector<vt_video::AnimatedImage> _battle_animations;
+
+    //! \brief Stores the animation script filename used when the enemy dies.
+    std::string _death_script_filename;
 }; // class GlobalEnemy : public GlobalActor
 
 
@@ -1295,6 +1287,6 @@ private:
     std::vector<GlobalActor *> _actors;
 }; // class GlobalParty
 
-} // namespace hoa_global
+} // namespace vt_global
 
 #endif // __GLOBAL_ACTORS_HEADER__

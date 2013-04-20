@@ -1,5 +1,6 @@
 ///////////////////////////////////////////////////////////////////////////////
-//            Copyright (C) 2004-2010 by The Allacrost Project
+//            Copyright (C) 2004-2011 by The Allacrost Project
+//            Copyright (C) 2012-2013 by Bertram (Valyria Tear)
 //                         All Rights Reserved
 //
 // This code is licensed under the GNU GPL version 2. It is free software
@@ -10,6 +11,7 @@
 /** ****************************************************************************
 *** \file    battle_utils.h
 *** \author  Tyler Olsen, roots@allacrost.org
+*** \author  Yohann Ferreira, yohann ferreira orange fr
 *** \brief   Header file for battle mode utility code
 ***
 *** This file contains utility code that is shared among the various battle mode
@@ -24,11 +26,14 @@
 
 #include <deque>
 
-namespace hoa_battle
+namespace vt_battle
 {
 
 namespace private_battle
 {
+
+class BattleActor;
+class BattleTarget;
 
 //! \name Screen dimension constants
 //@{
@@ -45,10 +50,10 @@ const uint32 SCREEN_HEIGHT = 12;
 *** \brief Identifications for the types of actions a player's characters may perform
 **/
 //@{
-const uint32 CATEGORY_ATTACK    = 0;
-const uint32 CATEGORY_SUPPORT   = 1;
-const uint32 CATEGORY_SPECIAL   = 2;
-const uint32 CATEGORY_ITEM      = 3;
+const int32 CATEGORY_WEAPON    = 0;
+const int32 CATEGORY_MAGIC     = 1;
+const int32 CATEGORY_SPECIAL   = 2;
+const int32 CATEGORY_ITEM      = 3;
 //@}
 
 
@@ -344,7 +349,7 @@ public:
     *** actor (index 0). The initial actor will always be the first valid actor in their respective
     *** party (index 0).
     **/
-    bool SetInitialTarget(BattleActor *user, hoa_global::GLOBAL_TARGET type);
+    bool SetInitialTarget(BattleActor *user, vt_global::GLOBAL_TARGET type);
 
     /** \brief Sets the target to a specific attack point on an actor
     *** \param type The type of target to set, must be one of the point type targets
@@ -355,19 +360,19 @@ public:
     *** actor argument is NULL, the _actor member should not be NULL when the function is called.
     *** If both are NULL, calling this method will perform no changes.
     **/
-    bool SetPointTarget(hoa_global::GLOBAL_TARGET type, uint32 attack_point, BattleActor *actor = NULL);
+    bool SetPointTarget(vt_global::GLOBAL_TARGET type, uint32 attack_point, BattleActor *actor = NULL);
 
     /** \brief Sets the target to an actor
     *** \param type The type of target to set, must be one of the actor type targets
     *** \param actor A pointer to the actor to set for the target
     **/
-    bool SetActorTarget(hoa_global::GLOBAL_TARGET type, BattleActor *actor);
+    bool SetActorTarget(vt_global::GLOBAL_TARGET type, BattleActor *actor);
 
     /** \brief Sets the target to a party
     *** \param type The type of target to set, must be one of the party type targets
     *** \param actor A pointer to the party to set for the target
     **/
-    bool SetPartyTarget(hoa_global::GLOBAL_TARGET type, std::deque<BattleActor *>* party);
+    bool SetPartyTarget(vt_global::GLOBAL_TARGET type, std::deque<BattleActor *>* party);
 
     /** \brief Returns true if the target is valid
     *** This method assumes that a valid target is one that is alive (non-zero HP). If the target type
@@ -433,11 +438,11 @@ public:
     *** enemy, for example "Claudius" or "Red Spider" . Attack point type targets return the name of the character or enemy
     *** seperated by a hyphen and followed by the point name, for example "Bat — Wing". Invalid targets will return "[Invalid Target]".
     **/
-    hoa_utils::ustring GetName();
+    vt_utils::ustring GetName();
 
     //! \name Class member accessor methods
     //@{
-    hoa_global::GLOBAL_TARGET GetType() const {
+    vt_global::GLOBAL_TARGET GetType() const {
         return _type;
     }
 
@@ -456,7 +461,7 @@ public:
 
 private:
     //! \brief The type of target this object represents (attack point, actor, or party)
-    hoa_global::GLOBAL_TARGET _type;
+    vt_global::GLOBAL_TARGET _type;
 
     //! \brief The attack point to target, as an index to the proper point on the _actor
     uint32 _point;
@@ -495,13 +500,13 @@ class BattleItem
 {
 public:
     //! \param item A pointer to the item to represent. Should be a non-NULL value.
-    BattleItem(hoa_global::GlobalItem item);
+    BattleItem(vt_global::GlobalItem item);
 
     ~BattleItem();
 
     //! \brief Class member accessor methods
     //@{
-    hoa_global::GlobalItem &GetItem() {
+    vt_global::GlobalItem &GetItem() {
         return _item;
     }
 
@@ -536,7 +541,7 @@ public:
     /** \brief A wrapper function that retrieves the target type of the item
     *** \note Calling this function is equivalent to calling GetItem().GetTargetType()
     **/
-    hoa_global::GLOBAL_TARGET GetTargetType() const {
+    vt_global::GLOBAL_TARGET GetTargetType() const {
         return _item.GetTargetType();
     }
 
@@ -552,7 +557,7 @@ public:
 
 private:
     //! \brief The item that this class represents
-    hoa_global::GlobalItem _item;
+    vt_global::GlobalItem _item;
 
     //! \brief The number of instances of this item that are available to be selected to be used
     uint32 _battle_count;
@@ -560,6 +565,6 @@ private:
 
 } // namespace private_battle
 
-} // namespace hoa_battle
+} // namespace vt_battle
 
 #endif // __BATTLE_UTILS_HEADER__

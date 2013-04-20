@@ -1,5 +1,6 @@
 ///////////////////////////////////////////////////////////////////////////////
-//            Copyright (C) 2004-2010 by The Allacrost Project
+//            Copyright (C) 2004-2011 by The Allacrost Project
+//            Copyright (C) 2012-2013 by Bertram (Valyria Tear)
 //                         All Rights Reserved
 //
 // This code is licensed under the GNU GPL version 2. It is free software
@@ -7,17 +8,24 @@
 // See http://www.gnu.org/copyleft/gpl.html for details.
 ///////////////////////////////////////////////////////////////////////////////
 
+/** ****************************************************************************
+*** \file    menu_window.h
+*** \author  Raj Sharma, roos@allacrost.org
+*** \author  Yohann Ferreira, yohann ferreira orange fr
+*** \brief   Header file for menu window class
+*** ***************************************************************************/
+
 #include <sstream>
 
 #include "engine/video/video.h"
 #include "menu_window.h"
 
-using namespace hoa_utils;
-using namespace hoa_video;
-using namespace hoa_video::private_video;
-using namespace hoa_gui::private_gui;
+using namespace vt_utils;
+using namespace vt_video;
+using namespace vt_video::private_video;
+using namespace vt_gui::private_gui;
 
-namespace hoa_gui
+namespace vt_gui
 {
 
 MenuWindow::MenuWindow() :
@@ -169,8 +177,7 @@ void MenuWindow::Update(uint32 frame_time)
 } // void MenuWindow::Update(uint32 frame_time)
 
 
-
-void MenuWindow::Draw()
+void MenuWindow::Draw(const Color& color)
 {
     if(_initialized == false) {
         IF_PRINT_WARNING(VIDEO_DEBUG) << "the menu window was not initialized:\n" << _initialization_errors << std::endl;
@@ -194,7 +201,7 @@ void MenuWindow::Draw()
     }
 
     VideoManager->Move(_x_position, _y_position);
-    _menu_image.Draw(Color::white);
+    _menu_image.Draw(color);
 
     if(GUIManager->DEBUG_DrawOutlines() == true) {
         _DEBUG_DrawOutline();
@@ -556,4 +563,4 @@ bool MenuWindow::_RecreateImage()
     return true;
 }
 
-}  // namespace hoa_gui
+}  // namespace vt_gui

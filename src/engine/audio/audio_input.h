@@ -1,5 +1,6 @@
 ////////////////////////////////////////////////////////////////////////////////
-//            Copyright (C) 2004-2010 by The Allacrost Project
+//            Copyright (C) 2004-2011 by The Allacrost Project
+//            Copyright (C) 2012-2013 by Bertram (Valyria Tear)
 //                         All Rights Reserved
 //
 // This code is licensed under the GNU GPL version 2. It is free software
@@ -11,6 +12,7 @@
 *** \file   audio_input.h
 *** \author Mois�s Ferrer Serra, byaku@allacrost.org
 *** \author Aaron Smith - etherstar@allacrost.org
+*** \author Yohann Ferreira, yohann ferreira orange fr
 *** \brief  Header file for classes that provide input for sounds
 ***
 *** This code provides classes for loading sounds (WAV and OGG). It also
@@ -32,13 +34,12 @@
 #include "alc.h"
 #endif
 
-#include "defs.h"
 #include "utils.h"
 
 #include <vorbis/vorbisfile.h>
 #include <fstream>
 
-namespace hoa_audio
+namespace vt_audio
 {
 
 namespace private_audio
@@ -289,6 +290,6 @@ private:
 
 } // namespace private_audio
 
-} // namespace hoa_audio
+} // namespace vt_audio
 
 #endif // __AUDIO_INPUT_HEADER__

@@ -1,5 +1,6 @@
 ///////////////////////////////////////////////////////////////////////////////
-//            Copyright (C) 2004-2010 by The Allacrost Project
+//            Copyright (C) 2004-2011 by The Allacrost Project
+//            Copyright (C) 2012-2013 by Bertram (Valyria Tear)
 //                         All Rights Reserved
 //
 // This code is licensed under the GNU GPL version 2. It is free software
@@ -10,6 +11,7 @@
 /** ****************************************************************************
 *** \file    boot.cpp
 *** \author  Viljami Korhonen, mindflayer@allacrost.org
+*** \author  Yohann Ferreira, yohann ferreira orange fr
 *** \brief   Source file for boot mode interface.
 *** ***************************************************************************/
 
@@ -22,12 +24,12 @@
 
 #include "common/global/global.h"
 
-#include "modes/map/map.h"
+#include "modes/map/map_mode.h"
 #include "modes/save/save_mode.h"
 
 #include "modes/mode_help_window.h"
 
-#ifdef DEBUG_MENU
+#ifdef DEBUG_FEATURES
 // Files below are used for boot mode to do a test launch of other modes
 #include "modes/battle/battle.h"
 #include "modes/menu/menu.h"
@@ -37,21 +39,21 @@
 #include <iostream>
 #include <sstream>
 
-using namespace hoa_utils;
+using namespace vt_utils;
 
-using namespace hoa_audio;
-using namespace hoa_video;
-using namespace hoa_gui;
-using namespace hoa_input;
-using namespace hoa_mode_manager;
-using namespace hoa_script;
-using namespace hoa_system;
+using namespace vt_audio;
+using namespace vt_video;
+using namespace vt_gui;
+using namespace vt_input;
+using namespace vt_mode_manager;
+using namespace vt_script;
+using namespace vt_system;
 
-using namespace hoa_global;
+using namespace vt_global;
 
-using namespace hoa_boot::private_boot;
+using namespace vt_boot::private_boot;
 
-namespace hoa_boot
+namespace vt_boot
 {
 
 bool BOOT_DEBUG = false;
@@ -68,10 +70,13 @@ BootMode::BootMode() :
     _boot_state(BOOT_STATE_INTRO),
     _exiting_to_new_game(false),
     _has_modified_settings(false),
+    _first_run(false),
     _key_setting_function(NULL),
     _joy_setting_function(NULL),
     _joy_axis_setting_function(NULL),
-    _message_window(ustring(), 210.0f, 733.0f)
+    _message_window(ustring(), 210.0f, 733.0f),
+    _menu_bar_alpha(0.0f),
+    _help_text_alpha(0.0f)
 {
     // Remove potential previous ambient overlays
     VideoManager->DisableFadeEffect();
@@ -79,10 +84,11 @@ BootMode::BootMode() :
     IF_PRINT_DEBUG(BOOT_DEBUG) << "BootMode constructor invoked" << std::endl;
     mode_type = MODE_MANAGER_BOOT_MODE;
 
-    _version_text.SetStyle(TextStyle("text20"));
-    std::string date_string = " - ";
-    date_string.append(__DATE__);
-    _version_text.SetText(UTranslate("Development Release") + MakeUnicodeString(date_string));
+    // Note: Not translated on purpose.
+    _version_text.SetStyle(TextStyle("text18"));
+    std::string version_string = "Development Release - ";
+    version_string.append(__DATE__);
+    _version_text.SetText(MakeUnicodeString(version_string));
 
     // Get rid of the old table to make sure no old data is used.
     ScriptManager->DropGlobalTable("boot");
@@ -126,6 +132,19 @@ BootMode::BootMode() :
 
     // make sure message window is not visible
     _message_window.Hide();
+
+    // Load the menu bar and the help text
+    _menu_bar.Load("img/menus/battle_bottom_menu.png", 1024, 128);
+
+    _f1_help_text.SetStyle(TextStyle("text18"));
+
+    // The timer that will be used to display the menu bar and the help text
+    _boot_timer.Initialize(14000);
+    _boot_timer.EnableManualUpdate();
+    _boot_timer.Run();
+
+    // Preload new game sound
+    AudioManager->LoadSound("snd/new_game.wav", this);
 } // BootMode::BootMode()
 
 
@@ -181,18 +200,45 @@ void BootMode::Update()
         }
     }
 
+    // Test whether the welcome sequence should be shown once
+    static bool language_selection_shown = false;
+    if(!language_selection_shown) {
+        _ShowLanguageSelectionWindow();
+        language_selection_shown = true;
+    }
+
+    // On first app run, show the language menu and apply language on any key press.
+    if (_first_run && _active_menu == &_language_options_menu) {
+        _active_menu->Update();
+        if (InputManager->UpPress()) {
+            _active_menu->InputUp();
+        }
+        else if (InputManager->DownPress()) {
+            _active_menu->InputDown();
+        }
+        else if (InputManager->AnyKeyPress()) {
+            // Set the language
+            _active_menu->InputConfirm();
+            // Go directly back to the main menu when first selecting the language.
+            _options_window.Hide();
+            _active_menu = &_main_menu;
+            // And show the help window
+            ModeManager->GetHelpWindow()->Show();
+            // save the settings (automatically changes the first_start variable to 0)
+            _has_modified_settings = true;
+            _SaveSettingsFile();
+            _first_run = false; // Terminate the first run sequence
+        }
+        return;
+    }
+
     HelpWindow *help_window = ModeManager->GetHelpWindow();
     if(help_window && help_window->IsActive()) {
         // Any key, except F1
         if(!InputManager->HelpPress() && InputManager->AnyKeyPress()) {
-            AudioManager->PlaySound("snd/confirm.wav");
+            GlobalManager->Media().PlaySound("confirm");
             help_window->Hide();
         }
-
-        // save the settings (automatically changes the first_start variable to 0)
-        _has_modified_settings = true;
-        _SaveSettingsFile();
-
         return;
     }
 
@@ -246,6 +292,26 @@ void BootMode::Update()
 
     _active_menu->Update();
 
+    // Update also the bar and f1 help text alpha
+    uint32 time_expired = SystemManager->GetUpdateTime();
+    _boot_timer.Update(time_expired);
+    if (_boot_timer.GetTimeExpired() >= 4000.0 && _boot_timer.GetTimeExpired() < 12000.0) {
+        _help_text_alpha += 0.001f * time_expired;
+        if (_help_text_alpha > 1.0f)
+            _help_text_alpha = 1.0f;
+    }
+    else if (_boot_timer.GetTimeExpired() >= 12000.0 && _boot_timer.GetTimeExpired() < 14000.0) {
+        _help_text_alpha -= 0.001f * time_expired;
+        if (_help_text_alpha < 0.0f)
+            _help_text_alpha = 0.0f;
+    }
+
+    if (_menu_bar_alpha < 0.6f) {
+        _menu_bar_alpha = _menu_bar_alpha + 0.001f * time_expired;
+        if (_menu_bar_alpha >= 0.6f)
+            _menu_bar_alpha = 0.6f;
+    }
+
     // Only quit when we are at the main menu level
     if(_active_menu == &_main_menu && InputManager->QuitPress()) {
         SystemManager->ExitGame();
@@ -257,10 +323,10 @@ void BootMode::Update()
         if(_active_menu->IsOptionEnabled(_active_menu->GetSelection())) {
             // Don't play the sound on New Games as they have their own sound
             if(_active_menu != &_main_menu && _active_menu->GetSelection() != -1)
-                AudioManager->PlaySound("snd/confirm.wav");
+                GlobalManager->Media().PlaySound("confirm");
         } else {
             // Otherwise play a different sound
-            AudioManager->PlaySound("snd/bump.wav");
+            GlobalManager->Media().PlaySound("bump");
         }
 
         _active_menu->InputConfirm();
@@ -294,7 +360,7 @@ void BootMode::Update()
         }
 
         // Play cancel sound
-        AudioManager->PlaySound("snd/cancel.wav");
+        GlobalManager->Media().PlaySound("cancel");
     }
 } // void BootMode::Update()
 
@@ -320,23 +386,23 @@ void BootMode::DrawPostEffects()
     GetScriptSupervisor().DrawPostEffects();
 
     if(_boot_state == BOOT_STATE_MENU) {
-        _options_window.Draw();
-
-        // Test whether the welcome window should be shown once
-        static bool help_window_shown = false;
-        if(!help_window_shown) {
-            _ShowHelpWindow();
-            help_window_shown = true;
+        if (!_first_run) {
+            VideoManager->Move(0.0f, 640.0f);
+            _menu_bar.Draw(Color(1.0f, 1.0f, 1.0f, _menu_bar_alpha));
         }
 
+        VideoManager->SetDrawFlags(VIDEO_X_LEFT, VIDEO_Y_BOTTOM, 0);
+        VideoManager->Move(322.0f, 745.0f);
+        _f1_help_text.Draw(Color(1.0f, 1.0f, 1.0f, _help_text_alpha));
+
+        VideoManager->Move(10.0f, 758.0f);
+        _version_text.Draw();
+
+        _options_window.Draw();
         if(_active_menu)
             _active_menu->Draw();
 
-        VideoManager->SetDrawFlags(VIDEO_X_LEFT, VIDEO_Y_BOTTOM, 0);
-        VideoManager->Move(10.0f, 758.0f);
-        _version_text.Draw();
         VideoManager->SetDrawFlags(VIDEO_X_RIGHT, VIDEO_Y_BOTTOM, 0);
-
         VideoManager->Move(0.0f, 0.0f);
         _message_window.Draw();
     }
@@ -350,7 +416,7 @@ bool BootMode::_SavesAvailable(int32 maxId)
 {
     assert(maxId > 0);
     int32 savesAvailable = 0;
-    std::string data_path = GetUserDataPath(true);
+    std::string data_path = GetUserDataPath();
     for(int id = 0; id < maxId; ++id) {
         std::ostringstream f;
         f << data_path + "saved_game_" << id << ".lua";
@@ -393,7 +459,7 @@ void BootMode::_SetupMainMenu()
     _main_menu.AddOption(UTranslate("Options"), &BootMode::_OnOptions);
 
     // Insert the debug options
-#ifdef DEBUG_MENU
+#ifdef DEBUG_FEATURES
     _main_menu.SetDimensions(1000.0f, 50.0f, 7, 1, 7, 1);
     _main_menu.AddOption(UTranslate("Battle"), &BootMode::_DEBUG_OnBattle);
     _main_menu.AddOption(UTranslate("Menu"), &BootMode::_DEBUG_OnMenu);
@@ -411,10 +477,8 @@ void BootMode::_SetupMainMenu()
         _main_menu.SetSelection(1);
     }
 
-    // Preload main sounds
-    AudioManager->LoadSound("snd/confirm.wav");
-    AudioManager->LoadSound("snd/cancel.wav");
-    AudioManager->LoadSound("snd/bump.wav");
+    _f1_help_text.SetText(VTranslate("Press '%s' to get to know about the game keys.",
+                                     InputManager->GetHelpKeyName()));
 }
 
 
@@ -481,9 +545,6 @@ void BootMode::_SetupAudioOptionsMenu()
     _audio_options_menu.AddOption(UTranslate("Music Volume: "), NULL, NULL, NULL, &BootMode::_OnMusicLeft, &BootMode::_OnMusicRight);
 
     _audio_options_menu.SetSelection(0);
-
-    // Preload test sound
-    AudioManager->LoadSound("snd/volume_test.wav", this);
 }
 
 
@@ -694,7 +755,7 @@ void BootMode::_OnNewGame()
 
 void BootMode::_OnLoadGame()
 {
-    hoa_save::SaveMode *SVM = new hoa_save::SaveMode(false);
+    vt_save::SaveMode *SVM = new vt_save::SaveMode(false);
     ModeManager->Push(SVM);
 }
 
@@ -713,7 +774,7 @@ void BootMode::_OnQuit()
 }
 
 
-#ifdef DEBUG_MENU
+#ifdef DEBUG_FEATURES
 void BootMode::_DEBUG_OnBattle()
 {
     ReadScriptDescriptor read_data;
@@ -738,7 +799,7 @@ void BootMode::_DEBUG_OnShop()
     read_data.RunScriptFunction("dat/debug/debug_shop.lua",
                                 "BootShopTest", true);
 }
-#endif // #ifdef DEBUG_MENU
+#endif // #ifdef DEBUG_FEATURES
 
 
 void BootMode::_OnVideoOptions()
@@ -859,7 +920,7 @@ void BootMode::_OnSoundLeft()
     AudioManager->SetSoundVolume(AudioManager->GetSoundVolume() - 0.1f);
     _RefreshAudioOptions();
     // Play a sound for user to hear new volume level.
-    AudioManager->PlaySound("snd/volume_test.wav");
+    GlobalManager->Media().PlaySound("volume_test");
     _has_modified_settings = true;
 }
 
@@ -870,7 +931,7 @@ void BootMode::_OnSoundRight()
     AudioManager->SetSoundVolume(AudioManager->GetSoundVolume() + 0.1f);
     _RefreshAudioOptions();
     // Play a sound for user to hear new volume level.
-    AudioManager->PlaySound("snd/volume_test.wav");
+    GlobalManager->Media().PlaySound("volume_test");
     _has_modified_settings = true;
 }
 
@@ -952,23 +1013,25 @@ void BootMode::_OnRestoreDefaultJoyButtons()
 // ***** BootMode helper methods
 // ****************************************************************************
 
-void BootMode::_ShowHelpWindow()
+void BootMode::_ShowLanguageSelectionWindow()
 {
     // Load the settings file for reading in the welcome variable
     ReadScriptDescriptor settings_lua;
     std::string file = GetSettingsFilename();
     if(!settings_lua.OpenFile(file)) {
-        PRINT_WARNING << "failed to load the boot settings file" << std::endl;
+        PRINT_WARNING << "failed to load the settings file" << std::endl;
+        return;
     }
 
     settings_lua.OpenTable("settings");
     if(settings_lua.ReadInt("first_start") == 1) {
-        ModeManager->GetHelpWindow()->Show();
+        _first_run = true;
+        _options_window.Show();
+        _active_menu = &_language_options_menu;
     }
     settings_lua.CloseTable();
     settings_lua.CloseFile();
 }
-
 
 void BootMode::_ShowMessageWindow(bool joystick)
 {
@@ -977,8 +1040,6 @@ void BootMode::_ShowMessageWindow(bool joystick)
     else
         _ShowMessageWindow(WAIT_KEY);
 }
-
-
 
 void BootMode::_ShowMessageWindow(WAIT_FOR wait)
 {
@@ -996,8 +1057,6 @@ void BootMode::_ShowMessageWindow(WAIT_FOR wait)
     _message_window.Show();
 }
 
-
-
 void BootMode::_ChangeResolution(int32 width, int32 height)
 {
     VideoManager->SetResolution(width, height);
@@ -1005,7 +1064,6 @@ void BootMode::_ChangeResolution(int32 width, int32 height)
     _RefreshVideoOptions();
     _has_modified_settings = true;
 }
-
 
 bool BootMode::_SaveSettingsFile(const std::string &filename)
 {
@@ -1018,13 +1076,12 @@ bool BootMode::_SaveSettingsFile(const std::string &filename)
     std::string fileTemp;
 
     // Load the settings file for reading in the original data
-    fileTemp = GetUserDataPath(false) + "/settings.lua";
-
+    fileTemp = GetUserConfigPath() + "/settings.lua";
 
     if(filename.empty())
         file = fileTemp;
     else
-        file = GetUserDataPath(false) + "/" + filename;
+        file = GetUserConfigPath() + "/" + filename;
 
     //copy the default file so we have an already set up lua file and then we can modify its settings
     if(!DoesFileExist(file))
@@ -1032,8 +1089,8 @@ bool BootMode::_SaveSettingsFile(const std::string &filename)
 
     WriteScriptDescriptor settings_lua;
     if(!settings_lua.OpenFile(file)) {
-        PRINT_ERROR << "Failed to save the settings file: " <<
-            settings_lua.GetFilename() << std::endl;
+        PRINT_ERROR << "Failed to open settings file: " <<
+            file << std::endl;
         return false;
     }
 
@@ -1308,4 +1365,4 @@ void BootMode::_SetQuitJoy(uint8 button)
     InputManager->SetQuitJoy(button);
 }
 
-} // namespace hoa_boot
+} // namespace vt_boot

@@ -1,5 +1,6 @@
 ////////////////////////////////////////////////////////////////////////////////
-//            Copyright (C) 2004-2010 by The Allacrost Project
+//            Copyright (C) 2004-2011 by The Allacrost Project
+//            Copyright (C) 2012-2013 by Bertram (Valyria Tear)
 //                         All Rights Reserved
 //
 // This code is licensed under the GNU GPL version 2. It is free software and
@@ -12,6 +13,7 @@
 *** \author  Viljami Korhonen, mindflayer@allacrost.org
 *** \author  Corey Hoffstein, visage@allacrost.org
 *** \author  Andy Gardner, chopperdave@allacrost.org
+*** \author  Yohann Ferreira, yohann ferreira orange fr
 *** \brief   Source file for actors present in battles.
 *** ***************************************************************************/
 
@@ -27,15 +29,15 @@
 #include "engine/input.h"
 #include "engine/script/script.h"
 
-using namespace hoa_utils;
-using namespace hoa_audio;
-using namespace hoa_video;
-using namespace hoa_input;
-using namespace hoa_system;
-using namespace hoa_global;
-using namespace hoa_script;
+using namespace vt_utils;
+using namespace vt_audio;
+using namespace vt_video;
+using namespace vt_input;
+using namespace vt_system;
+using namespace vt_global;
+using namespace vt_script;
 
-namespace hoa_battle
+namespace vt_battle
 {
 
 namespace private_battle
@@ -63,10 +65,13 @@ void BattleParticleEffect::DrawSprite()
 void BattleAmmo::DrawSprite()
 {
     // Draw potential sprite ammo
-    if(_shown) {
-        VideoManager->Move(GetXLocation(), GetYLocation());
-        _ammo_image.Draw();
-    }
+    if(!_shown)
+        return;
+
+    VideoManager->Move(GetXLocation(), GetYLocation());
+    _ammo_image.Draw(Color(0.0f, 0.0f, 0.0f, 0.6f));
+    VideoManager->MoveRelative(0.0f, -_flying_height);
+    _ammo_image.Draw();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -169,23 +174,20 @@ void BattleActor::ChangeState(ACTOR_STATE new_state)
         }
         break;
     case ACTOR_STATE_COOL_DOWN:
+    {
         _execution_finished = false;
-        if(_action == NULL) {
-            // TODO: This case seems to occur when the action could not be executed (due to insufficient SP, etc).
-            // When this is the case, the action gets deleted and the actor would otherwise get stuck, because we
-            // dont have a cool-down time available to give it. This case needs to be handled better
-            IF_PRINT_WARNING(BATTLE_DEBUG) << "no action available during state change: " << _state << std::endl;
-            // TEMP: find a better solution than this temporary hack
-            ChangeState(ACTOR_STATE_IDLE);
-        } else {
-            _state_timer.Initialize(_action->GetCoolDownTime());
-            _state_timer.Run();
-        }
+        uint32 cool_down_time = 1000; // Default value, overriden by valid actions
+        if(_action)
+            cool_down_time = _action->GetCoolDownTime();
+
+        _state_timer.Initialize(cool_down_time);
+        _state_timer.Run();
         break;
+    }
     case ACTOR_STATE_DYING:
         ChangeSpriteAnimation("dying");
-        _state_timer.Initialize(1500); // Default value, overriden for characters
-        _state_timer.Run();
+        // Note that the state timer is initiliazed in Battle Character
+        // or In BattleEnemy
 
         // Make the battle engine aware of the actor death
         _effects_supervisor->RemoveAllStatus();
@@ -329,7 +331,8 @@ void BattleActor::Update()
                 _state_timer.Update();
         }
 
-        _effects_supervisor->Update();
+        if (IsAlive())
+            _effects_supervisor->Update();
     }
     else if (_state == ACTOR_STATE_DYING) {
         // Permits the actor to die even in pause mode,
@@ -398,7 +401,7 @@ void BattleActor::_UpdateStaminaIconPosition()
         y_pos = STAMINA_LOCATION_BOTTOM;
         break;
     case ACTOR_STATE_DYING:
-        // Make the icon fall whil disappearing...
+        // Make the icon fall while disappearing...
         y_pos += _state_timer.PercentComplete();
         break;
     default:
@@ -419,7 +422,7 @@ void BattleActor::DrawIndicators() const
     _indicator_supervisor->Draw();
 }
 
-void BattleActor::DrawStaminaIcon(const hoa_video::Color &color) const
+void BattleActor::DrawStaminaIcon(const vt_video::Color &color) const
 {
     if(!IsAlive())
         return;
@@ -456,39 +459,6 @@ void BattleActor::SetAgility(uint32 agility)
     BattleMode::CurrentInstance()->SetActorIdleStateTime(this);
 }
 
-uint32 BattleActor::GetAverageDefense()
-{
-    uint32 phys_defense = 0;
-
-    for(uint32 i = 0; i < _attack_points.size(); i++)
-        phys_defense += _attack_points[i]->GetTotalPhysicalDefense();
-    phys_defense /= _attack_points.size();
-
-    return phys_defense;
-}
-
-uint32 BattleActor::GetAverageMagicalDefense()
-{
-    uint32 mag_defense = 0;
-
-    for(uint32 i = 0; i < _attack_points.size(); i++)
-        mag_defense += _attack_points[i]->GetTotalMagicalDefense();
-
-    mag_defense /= _attack_points.size();
-    return mag_defense;
-}
-
-float BattleActor::GetAverageEvadeRating()
-{
-    float evade = 0.0f;
-
-    for(uint32 i = 0; i < _attack_points.size(); i++)
-        evade += _attack_points[i]->GetTotalEvadeRating();
-    evade /= static_cast<float>(_attack_points.size());
-
-    return evade;
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 // BattleCharacter class
 ////////////////////////////////////////////////////////////////////////////////
@@ -514,6 +484,18 @@ BattleCharacter::BattleCharacter(GlobalCharacter *character) :
     _action_selection_text.SetText("");
     _target_selection_text.SetStyle(TextStyle("text20"));
     _target_selection_text.SetText("");
+
+    // Init the battle animation pointers
+    _current_sprite_animation = _global_character->RetrieveBattleAnimation(_sprite_animation_alias);
+    // Add custom weapon animation
+    std::string weapon_animation;
+    if (_global_character->GetWeaponEquipped())
+            weapon_animation = _global_character->GetWeaponEquipped()->GetWeaponAnimationFile(_global_character->GetID(), _sprite_animation_alias);
+    if (weapon_animation.empty() || !_current_weapon_animation.LoadFromAnimationScript(weapon_animation))
+        _current_weapon_animation.Clear();
+
+    // Prepare the flying height of potential ammo weapons
+    _ammo.SetFlyingHeight(GetSpriteHeight() / 2.0f);
 }
 
 void BattleCharacter::ResetActor()
@@ -552,7 +534,7 @@ void BattleCharacter::ChangeState(ACTOR_STATE new_state)
         std::string animation_name = _action->GetActionName().empty() ? "idle" : _action->GetActionName();
         ChangeSpriteAnimation(animation_name);
         // Reset state timer
-        _state_timer.Initialize(_global_character->RetrieveBattleAnimation(animation_name)->GetAnimationLength());
+        _state_timer.Initialize(_current_sprite_animation->GetAnimationLength());
         _state_timer.Run();
         break;
     }
@@ -561,7 +543,7 @@ void BattleCharacter::ChangeState(ACTOR_STATE new_state)
         if(_action)
             _action->Cancel();
         ChangeSpriteAnimation("dying");
-        _state_timer.Initialize(_global_character->RetrieveBattleAnimation("dying")->GetAnimationLength());
+        _state_timer.Initialize(_current_sprite_animation->GetAnimationLength());
         _state_timer.Run();
         break;
     case ACTOR_STATE_DEAD:
@@ -569,7 +551,7 @@ void BattleCharacter::ChangeState(ACTOR_STATE new_state)
         break;
     case ACTOR_STATE_REVIVE:
         ChangeSpriteAnimation("revive");
-        _state_timer.Initialize(_global_character->RetrieveBattleAnimation("revive")->GetAnimationLength());
+        _state_timer.Initialize(_current_sprite_animation->GetAnimationLength());
         _state_timer.Run();
         break;
     default:
@@ -588,11 +570,11 @@ void BattleCharacter::Update()
     _animation_timer.Update();
 
     // Update the active sprite animation
-    _global_character->RetrieveBattleAnimation(_sprite_animation_alias)->Update();
+    _current_sprite_animation->Update();
+    _current_weapon_animation.Update();
 
     // Update potential scripted Battle action without hardcoded logic in that case
-    if(_action &&
-            _action->IsScripted() && _state == ACTOR_STATE_ACTING) {
+    if(_action && _action->IsScripted() && _state == ACTOR_STATE_ACTING) {
         if(!_action->Update())
             return;
         else
@@ -611,6 +593,8 @@ void BattleCharacter::Update()
         if (_is_stunned || GetHitPoints() < (GetMaxHitPoints() / 4))
             ChangeSpriteAnimation("poor");
     } else if(_sprite_animation_alias == "run") {
+        // no need to do anything
+    } else if(_sprite_animation_alias == "run_after_victory") {
         // no need to do anything
     } else if(_sprite_animation_alias == "dying") {
         // no need to do anything, the change state will handle it
@@ -667,10 +651,11 @@ void BattleCharacter::Update()
 void BattleCharacter::DrawSprite()
 {
     VideoManager->Move(_x_location, _y_location);
-    _global_character->RetrieveBattleAnimation(_sprite_animation_alias)->Draw();
+    _current_sprite_animation->Draw();
+    _current_weapon_animation.Draw();
 
     if(_is_stunned && (_state == ACTOR_STATE_IDLE || _state == ACTOR_STATE_WARM_UP || _state == ACTOR_STATE_COOL_DOWN)) {
-        VideoManager->MoveRelative(0, GetSpriteHeight());
+        VideoManager->MoveRelative(0, -GetSpriteHeight());
         BattleMode::CurrentInstance()->GetMedia().GetStunnedIcon().Draw();
     }
 } // void BattleCharacter::DrawSprite()
@@ -683,8 +668,19 @@ void BattleCharacter::ChangeSpriteAnimation(const std::string &alias)
         _before_attack_sprite_animation = _sprite_animation_alias;
 
     _sprite_animation_alias = alias;
-    _global_character->RetrieveBattleAnimation(_sprite_animation_alias)->ResetAnimation();
-    uint32 timer_length = _global_character->RetrieveBattleAnimation(_sprite_animation_alias)->GetAnimationLength();
+    _current_sprite_animation = _global_character->RetrieveBattleAnimation(_sprite_animation_alias);
+
+    // Change the weapon animation as well
+    // Add custom weapon animation
+    std::string weapon_animation;
+    if (_global_character->GetWeaponEquipped())
+            weapon_animation = _global_character->GetWeaponEquipped()->GetWeaponAnimationFile(_global_character->GetID(), _sprite_animation_alias);
+    if (weapon_animation.empty() || !_current_weapon_animation.LoadFromAnimationScript(weapon_animation))
+        _current_weapon_animation.Clear();
+
+    _current_sprite_animation->ResetAnimation();
+    _current_weapon_animation.ResetAnimation();
+    uint32 timer_length = _current_sprite_animation->GetAnimationLength();
 
     _animation_timer.Reset();
     _animation_timer.SetDuration(timer_length);
@@ -883,6 +879,38 @@ BattleEnemy::BattleEnemy(GlobalEnemy *enemy) :
     for(std::map<uint32, GlobalSkill *>::const_iterator i = (_global_enemy->GetSkills()).begin(); i != (_global_enemy->GetSkills()).end(); i++) {
         _enemy_skills.push_back(i->second);
     }
+
+    _LoadDeathAnimationScript();
+
+    _sprite_animations = _global_enemy->GetBattleAnimations();
+}
+
+void BattleEnemy::_LoadDeathAnimationScript()
+{
+    // Loads potential death animation script functions
+    if (_global_enemy->GetDeathScriptFilename().empty())
+        return;
+
+    std::string filename = _global_enemy->GetDeathScriptFilename();
+
+    std::string tablespace = ScriptEngine::GetTableSpace(filename);
+    ScriptManager->DropGlobalTable(tablespace);
+
+    ReadScriptDescriptor death_script;
+    if(!death_script.OpenFile(filename))
+        return;
+
+    if(death_script.OpenTablespace().empty()) {
+        PRINT_ERROR << "The enemy death script file: " << filename
+                    << "has got no valid namespace" << std::endl;
+        death_script.CloseFile();
+        return;
+    }
+
+    _death_init = death_script.ReadFunctionPointer("Initialize");
+    _death_update = death_script.ReadFunctionPointer("Update");
+    _death_draw_on_sprite = death_script.ReadFunctionPointer("DrawOnSprite");
+    death_script.CloseFile();
 }
 
 BattleEnemy::~BattleEnemy()
@@ -893,9 +921,6 @@ BattleEnemy::~BattleEnemy()
 void BattleEnemy::ResetActor()
 {
     BattleActor::ResetActor();
-
-    std::vector<StillImage>& sprite_frames = *(_global_enemy->GetBattleSpriteFrames());
-    sprite_frames[3].DisableGrayScale();
 }
 
 void BattleEnemy::ChangeState(ACTOR_STATE new_state)
@@ -909,6 +934,31 @@ void BattleEnemy::ChangeState(ACTOR_STATE new_state)
     case ACTOR_STATE_ACTING:
         _state_timer.Initialize(400); // Default monster action time
         _state_timer.Run();
+        break;
+    case ACTOR_STATE_DYING:
+        // Trigger the death sequence if it is valid
+        if (_death_init.is_valid()) {
+            try {
+                ScriptCallFunction<void>(_death_init, BattleMode::CurrentInstance(), this);
+            } catch(const luabind::error &e) {
+                PRINT_ERROR << "Error while triggering Initialize() function of enemy id: " << _global_actor->GetID() << std::endl;
+                ScriptManager->HandleLuaError(e);
+            } catch(const luabind::cast_failed &e) {
+                PRINT_ERROR << "Error while triggering Initialize() function of enemy id: " << _global_actor->GetID() << std::endl;
+                ScriptManager->HandleCastError(e);
+            }
+        }
+        else {
+            // Default value, not used when scripted
+            _state_timer.Initialize(1500);
+            _state_timer.Run();
+        }
+
+        ChangeSpriteAnimation("dying");
+
+        // Make the battle engine aware of the actor death
+        _effects_supervisor->RemoveAllStatus();
+        BattleMode::CurrentInstance()->NotifyActorDeath(this);
         break;
     default:
         break;
@@ -927,11 +977,9 @@ void BattleEnemy::Update()
 {
     BattleActor::Update();
 
-    // Only set the origin when actor are in normal battle mode,
-    // Otherwise the battle sequence manager will take care of them.
-    if(BattleMode::CurrentInstance()->GetState() == BATTLE_STATE_NORMAL) {
-        _x_location = _x_origin;
-        _y_location = _y_origin;
+    // Updates the sprites animations
+    for (uint32 i = 0; i < _sprite_animations->size(); ++i) {
+        _sprite_animations->at(i).Update();
     }
 
     // Note: that update part only handles attack actions
@@ -941,8 +989,29 @@ void BattleEnemy::Update()
         else
             _x_location = _x_origin - TILE_SIZE * (2.0f - 2.0f * _state_timer.PercentComplete());
     } else if(_state == ACTOR_STATE_DYING) {
-        // Add a fade out effect
-        _sprite_alpha = 1.0f - _state_timer.PercentComplete();
+        if (_death_init.is_valid()) {
+            if (_death_update.is_valid()) {
+                // Change the state when the animation has finished.
+                try {
+                    if (ScriptCallFunction<bool>(_death_update))
+                        ChangeState(ACTOR_STATE_DEAD);
+                } catch(const luabind::error &e) {
+                    PRINT_ERROR << "Error while triggering Update() function of enemy id: " << _global_actor->GetID() << std::endl;
+                    ScriptManager->HandleLuaError(e);
+                    // Do not block the player
+                    ChangeState(ACTOR_STATE_DEAD);
+                } catch(const luabind::cast_failed &e) {
+                    PRINT_ERROR << "Error while triggering Update() function of enemy id: " << _global_actor->GetID() << std::endl;
+                    ScriptManager->HandleCastError(e);
+                    // Do not block the player
+                    ChangeState(ACTOR_STATE_DEAD);
+                }
+            }
+        }
+        else {
+            // Add a default fade out effect
+            _sprite_alpha = 1.0f - _state_timer.PercentComplete();
+        }
     }
     // Reset the animations set below to idle once done
     else if(_animation_timer.IsFinished()) {
@@ -953,7 +1022,7 @@ void BattleEnemy::Update()
 
     // Add a shake effect when the battle actor has received damages
     if(_hurt_timer.IsRunning())
-        _x_location += RandomFloat(-2.0f, 2.0f);
+        _x_location = _x_origin + RandomFloat(-2.0f, 2.0f);
 
     if(_state == ACTOR_STATE_ACTING) {
         if(!_execution_finished) {
@@ -973,34 +1042,61 @@ void BattleEnemy::DrawSprite()
     if(_state == ACTOR_STATE_DEAD)
         return;
 
-    std::vector<StillImage>& sprite_frames = *(_global_enemy->GetBattleSpriteFrames());
     float hp_percent = static_cast<float>(GetHitPoints()) / static_cast<float>(GetMaxHitPoints());
 
     VideoManager->Move(_x_location, _y_location);
     // Alpha will range from 1.0 to 0.0 in the following calculations
     if(_state == ACTOR_STATE_DYING) {
-        sprite_frames[3].Draw(Color(1.0f, 1.0f, 1.0f, _sprite_alpha));
+        _sprite_animations->at(GLOBAL_ENEMY_HURT_HEAVILY).Draw(Color(1.0f, 1.0f, 1.0f, _sprite_alpha));
+
+        try {
+            if (_death_draw_on_sprite.is_valid())
+                ScriptCallFunction<void>(_death_draw_on_sprite);
+        } catch(const luabind::error &e) {
+            PRINT_ERROR << "Error while triggering DrawOnSprite() function of enemy id: " << _global_actor->GetID() << std::endl;
+            ScriptManager->HandleLuaError(e);
+        } catch(const luabind::cast_failed &e) {
+            PRINT_ERROR << "Error while triggering DrawOnSprite() function of enemy id: " << _global_actor->GetID() << std::endl;
+            ScriptManager->HandleCastError(e);
+        }
+
     } else if(GetHitPoints() == GetMaxHitPoints()) {
-        sprite_frames[0].Draw();
+        _sprite_animations->at(GLOBAL_ENEMY_HURT_NONE).Draw();
     } else if(hp_percent > 0.666f) {
-        sprite_frames[0].Draw();
+        _sprite_animations->at(GLOBAL_ENEMY_HURT_NONE).Draw();
         float alpha = 1.0f - ((hp_percent - 0.666f) * 3.0f);
-        sprite_frames[1].Draw(Color(1.0f, 1.0f, 1.0f, alpha));
+        _sprite_animations->at(GLOBAL_ENEMY_HURT_SLIGHTLY).Draw(Color(1.0f, 1.0f, 1.0f, alpha));
     } else if(hp_percent >  0.333f) {
-        sprite_frames[1].Draw();
+        _sprite_animations->at(GLOBAL_ENEMY_HURT_SLIGHTLY).Draw();
         float alpha = 1.0f - ((hp_percent - 0.333f) * 3.0f);
-        sprite_frames[2].Draw(Color(1.0f, 1.0f, 1.0f, alpha));
+        _sprite_animations->at(GLOBAL_ENEMY_HURT_MEDIUM).Draw(Color(1.0f, 1.0f, 1.0f, alpha));
     } else { // (hp_precent > 0.0f)
-        sprite_frames[2].Draw();
+        _sprite_animations->at(GLOBAL_ENEMY_HURT_MEDIUM).Draw();
         float alpha = 1.0f - (hp_percent * 3.0f);
-        sprite_frames[3].Draw(Color(1.0f, 1.0f, 1.0f, alpha));
+        _sprite_animations->at(GLOBAL_ENEMY_HURT_HEAVILY).Draw(Color(1.0f, 1.0f, 1.0f, alpha));
     }
 
     if(_is_stunned && (_state == ACTOR_STATE_IDLE || _state == ACTOR_STATE_WARM_UP || _state == ACTOR_STATE_COOL_DOWN)) {
-        VideoManager->MoveRelative(0, GetSpriteHeight());
+        VideoManager->MoveRelative(0, -GetSpriteHeight());
         BattleMode::CurrentInstance()->GetMedia().GetStunnedIcon().Draw();
     }
 } // void BattleEnemy::DrawSprite()
+
+void BattleEnemy::DrawStaminaIcon(const vt_video::Color &color) const
+{
+    if(!IsAlive())
+        return;
+
+    VideoManager->Move(_x_stamina_location, _y_stamina_location);
+    // Make the stamina icon fade away when dying, use the enemy sprite alpha
+    if(_state == ACTOR_STATE_DYING) {
+        _stamina_icon.Draw(Color(color.GetRed(), color.GetGreen(),
+                                 color.GetBlue(), _sprite_alpha));
+    }
+    else {
+        _stamina_icon.Draw(color);
+    }
+}
 
 // TODO: No party target will work, this will have to be addressed eventually.
 // The use of a skill on dead enemies is not supported either.
@@ -1125,4 +1221,4 @@ void BattleEnemy::_DecideAction()
 
 } // namespace private_battle
 
-} // namespace hoa_battle
+} // namespace vt_battle

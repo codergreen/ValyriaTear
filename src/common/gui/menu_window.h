@@ -1,5 +1,6 @@
 ///////////////////////////////////////////////////////////////////////////////
-//            Copyright (C) 2004-2010 by The Allacrost Project
+//            Copyright (C) 2004-2011 by The Allacrost Project
+//            Copyright (C) 2012-2013 by Bertram (Valyria Tear)
 //                         All Rights Reserved
 //
 // This code is licensed under the GNU GPL version 2. It is free software
@@ -10,20 +11,20 @@
 /** ****************************************************************************
 *** \file    menu_window.h
 *** \author  Raj Sharma, roos@allacrost.org
+*** \author  Yohann Ferreira, yohann ferreira orange fr
 *** \brief   Header file for menu window class
 *** ***************************************************************************/
 
 #ifndef __MENU_WINDOW_HEADER__
 #define __MENU_WINDOW_HEADER__
 
-#include "defs.h"
 #include "utils.h"
 
 #include "gui.h"
 #include "engine/video/screen_rect.h"
 #include "engine/video/image.h"
 
-namespace hoa_gui
+namespace vt_gui
 {
 
 //! \brief How many milliseconds it takes for a window to scroll in or out of view.
@@ -115,7 +116,7 @@ public:
     *** - borders[2][1]: bottom side
     *** - borders[2][2]: bottom right corner
     **/
-    hoa_video::StillImage borders[3][3];
+    vt_video::StillImage borders[3][3];
 
     /** \brief Border-connecting images, used when two or more MenuWindows are side by side.
     ***  There are four tri-connectors and one quad-connector. tri_t would be an image for
@@ -126,10 +127,10 @@ public:
     ***  - connectors[3]: right tri-connector
     ***  - connectors[4]: quad connector
     **/
-    hoa_video::StillImage connectors[5];
+    vt_video::StillImage connectors[5];
 
     //! \brief The (optional) background image of the menu skin that fills the inside of the MenuWindow
-    hoa_video::StillImage background;
+    vt_video::StillImage background;
 }; // class MenuSkin
 
 } // namespace private_gui
@@ -200,8 +201,14 @@ public:
     virtual void Update()
     {}
 
-    //! \brief Draws the menu window to the screen.
-    void Draw();
+    //! \brief Draws the menu window to the screen with default color and opacity
+    void Draw()
+    {
+        Draw(vt_video::Color::white);
+    }
+
+    //! \brief Draws the menu window to the screen with a specified color and opacity
+    void Draw(const vt_video::Color& color);
 
     /** \brief Causes the menu to begin making itself visible.
     *** Depending on the display mode, the menu might show instantly or gradually.
@@ -254,7 +261,7 @@ public:
     *** same scissor rectangle that is reflective of the window's full size.
     ***
     **/
-    hoa_video::ScreenRect GetScissorRect() const {
+    vt_video::ScreenRect GetScissorRect() const {
         return _scissor_rect;
     }
 
@@ -302,7 +309,7 @@ private:
     int32 _display_timer;
 
     //! \brief The image that creates the window
-    hoa_video::CompositeImage _menu_image;
+    vt_video::CompositeImage _menu_image;
 
     //! \brief The window's display mode (instant, expand from center, etc).
     VIDEO_MENU_DISPLAY_MODE _display_mode;
@@ -311,7 +318,7 @@ private:
     bool _is_scissored;
 
     //! \brief The rectangle used for scissoring, set during each call to Update().
-    hoa_video::ScreenRect _scissor_rect;
+    vt_video::ScreenRect _scissor_rect;
 
     /** \brief Used to create the menu window's image when the visible properties of the window change.
     *** \return True if the menu image was successfully created, false otherwise.
@@ -324,6 +331,6 @@ private:
     bool _RecreateImage();
 }; // class MenuWindow : public GUIElement
 
-} // namespace hoa_gui
+} // namespace vt_gui
 
 #endif  // __MENU_WINDOW_HEADER__

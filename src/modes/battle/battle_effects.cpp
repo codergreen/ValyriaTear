@@ -1,5 +1,6 @@
 ////////////////////////////////////////////////////////////////////////////////
-//            Copyright (C) 2004-2009 by The Allacrost Project
+//            Copyright (C) 2004-2011 by The Allacrost Project
+//            Copyright (C) 2012-2013 by Bertram (Valyria Tear)
 //                         All Rights Reserved
 //
 // This code is licensed under the GNU GPL version 2. It is free software
@@ -10,6 +11,7 @@
 /** ****************************************************************************
 *** \file    battle_effects.cpp
 *** \author  Tyler Olsen, roots@allacrost.org
+*** \author  Yohann Ferreira, yohann ferreira orange fr
 *** \brief   Source file for battle actor effects.
 *** ***************************************************************************/
 
@@ -25,14 +27,14 @@
 #include "modes/battle/battle_indicators.h"
 #include "modes/battle/battle_utils.h"
 
-using namespace hoa_utils;
-using namespace hoa_system;
-using namespace hoa_script;
-using namespace hoa_video;
+using namespace vt_utils;
+using namespace vt_system;
+using namespace vt_script;
+using namespace vt_video;
 
-using namespace hoa_global;
+using namespace vt_global;
 
-namespace hoa_battle
+namespace vt_battle
 {
 
 namespace private_battle
@@ -114,11 +116,11 @@ BattleStatusEffect::BattleStatusEffect(GLOBAL_STATUS type, GLOBAL_INTENSITY inte
     // --- (4): Finish initialization of members
     _timer.Reset();
     _timer.Run();
-    _icon_image = BattleMode::CurrentInstance()->GetMedia().GetStatusIcon(_type, _intensity);
+    _icon_image = GlobalManager->Media().GetStatusIcon(_type, _intensity);
 }
 
 
-void BattleStatusEffect::SetIntensity(hoa_global::GLOBAL_INTENSITY intensity)
+void BattleStatusEffect::SetIntensity(vt_global::GLOBAL_INTENSITY intensity)
 {
     if((intensity < GLOBAL_INTENSITY_NEUTRAL) || (intensity >= GLOBAL_INTENSITY_TOTAL)) {
         IF_PRINT_WARNING(BATTLE_DEBUG) << "attempted to set status effect to invalid intensity: " << intensity << std::endl;
@@ -159,7 +161,7 @@ void BattleStatusEffect::_ProcessIntensityChange(bool reset_timer_only)
         return;
 
     _intensity_changed = true;
-    _icon_image = BattleMode::CurrentInstance()->GetMedia().GetStatusIcon(_type, _intensity);
+    _icon_image = GlobalManager->Media().GetStatusIcon(_type, _intensity);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -194,7 +196,7 @@ void EffectsSupervisor::Update()
 
         bool effect_removed = false;
 
-        hoa_system::SystemTimer *effect_timer = _status_effects[i]->GetTimer();
+        vt_system::SystemTimer *effect_timer = _status_effects[i]->GetTimer();
 
         // Update the effect time while taking in account the battle speed
         effect_timer->Update(SystemManager->GetUpdateTime() * BattleMode::CurrentInstance()->GetBattleTypeTimeFactor());
@@ -442,4 +444,4 @@ void EffectsSupervisor::_RemoveStatus(BattleStatusEffect *status_effect)
 
 } // namespace private_battle
 
-} // namespace hoa_battle
+} // namespace vt_battle

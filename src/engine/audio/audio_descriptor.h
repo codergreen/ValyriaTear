@@ -1,5 +1,6 @@
 ////////////////////////////////////////////////////////////////////////////////
-//            Copyright (C) 2004-2010 by The Allacrost Project
+//            Copyright (C) 2004-2011 by The Allacrost Project
+//            Copyright (C) 2012-2013 by Bertram (Valyria Tear)
 //                         All Rights Reserved
 //
 // This code is licensed under the GNU GPL version 2. It is free software
@@ -11,6 +12,7 @@
 *** \file   audio_descriptor.h
 *** \author Mois�s Ferrer Serra, byaku@allacrost.org
 *** \author Tyler Olsen, roots@allacrost.org
+*** \author Yohann Ferreira, yohann ferreira orange fr
 *** \brief  Header file for audio descriptors, sources and buffers
 ***
 *** This code provides the interface for the sound and music descriptors, that
@@ -28,8 +30,14 @@
 
 #include <cstring>
 
-namespace hoa_audio
+namespace vt_mode_manager {
+class GameMode;
+}
+
+namespace vt_audio
 {
+
+class AudioDescriptor;
 
 //! \brief The set of states that AudioDescriptor class objects may be in
 enum AUDIO_STATE {
@@ -59,6 +67,8 @@ enum AUDIO_LOAD {
 
 namespace private_audio
 {
+
+class AudioEffect;
 
 //! \brief The default buffer size (in bytes) for streaming buffers
 const uint32 DEFAULT_BUFFER_SIZE = 8192;
@@ -315,25 +325,25 @@ public:
     *** when the game mode is deleted.
     *** This function won't add NULL reference and won't permit duplicate owners.
     **/
-    void AddOwner(hoa_mode_manager::GameMode *gm);
+    void AddOwner(vt_mode_manager::GameMode *gm);
 
     /**
     *** Adds multiple owners at once.
     *** @see AddOwner()
     **/
-    void AddOwners(std::vector<hoa_mode_manager::GameMode *>& owners);
+    void AddOwners(std::vector<vt_mode_manager::GameMode *>& owners);
 
     /**
     *** Remove a game mode reference from the audio descriptor owners,
     *** and checks whether the file data can be freed.
     *** \returns whether the descriptor should be removed from the cache.
     **/
-    bool RemoveOwner(hoa_mode_manager::GameMode *gm);
+    bool RemoveOwner(vt_mode_manager::GameMode *gm);
 
     /**
     *** Get the list of game mode claiming ownership over the audio descriptor.
     **/
-    std::vector<hoa_mode_manager::GameMode *>* GetOwners() {
+    std::vector<vt_mode_manager::GameMode *>* GetOwners() {
         return &_owners;
     }
 
@@ -418,7 +428,7 @@ protected:
     *** Musics and sounds that are never owned will have to be freed manually.
     *** @see AddOwner(), RemoveOwner()
     **/
-    std::vector<hoa_mode_manager::GameMode *> _owners;
+    std::vector<vt_mode_manager::GameMode *> _owners;
 
     //! \brief Holds all active audio effects for this descriptor
     std::vector<private_audio::AudioEffect *> _audio_effects;
@@ -530,6 +540,6 @@ public:
     bool Play();
 }; // class MusicDescriptor : public AudioDescriptor
 
-} // namespace hoa_audio
+} // namespace vt_audio
 
 #endif

@@ -1,6 +1,6 @@
 ////////////////////////////////////////////////////////////////////////////////
 //            Copyright (C) 2004-2011 by The Allacrost Project
-//            Copyright (C) 2012 by Bertram (Valyria Tear)
+//            Copyright (C) 2012-2013 by Bertram (Valyria Tear)
 //                         All Rights Reserved
 //
 // This code is licensed under the GNU GPL version 2. It is free software
@@ -17,17 +17,17 @@
 
 #include "global.h"
 #include "engine/system.h"
-#include "modes/map/map.h"
+#include "modes/map/map_mode.h"
 
-using namespace hoa_utils;
+using namespace vt_utils;
 
-using namespace hoa_video;
-using namespace hoa_script;
-using namespace hoa_system;
+using namespace vt_video;
+using namespace vt_script;
+using namespace vt_system;
 
-template<> hoa_global::GameGlobal *Singleton<hoa_global::GameGlobal>::_singleton_reference = NULL;
+template<> vt_global::GameGlobal *Singleton<vt_global::GameGlobal>::_singleton_reference = NULL;
 
-namespace hoa_global
+namespace vt_global
 {
 
 using namespace private_global;
@@ -96,15 +96,20 @@ GameGlobal::~GameGlobal()
     _CloseGlobalScripts();
 } // GameGlobal::~GameGlobal()
 
+bool GameGlobal::SingletonInitialize()
+{
+    // Init the media files.
+    _global_media.Initialize();
+
+    return _LoadGlobalScripts();
+}
+
 void GameGlobal::_CloseGlobalScripts() {
     // Close all persistent script files
     _global_script.CloseFile();
 
     _items_script.CloseTable();
     _items_script.CloseFile();
-
-    _key_items_script.CloseTable();
-    _key_items_script.CloseFile();
 
     _weapons_script.CloseTable();
     _weapons_script.CloseFile();
@@ -121,14 +126,14 @@ void GameGlobal::_CloseGlobalScripts() {
     _leg_armor_script.CloseTable();
     _leg_armor_script.CloseFile();
 
-    _attack_skills_script.CloseTable();
-    _attack_skills_script.CloseFile();
+    _weapon_skills_script.CloseTable();
+    _weapon_skills_script.CloseFile();
+
+    _magic_skills_script.CloseTable();
+    _magic_skills_script.CloseFile();
 
     _special_skills_script.CloseTable();
     _special_skills_script.CloseFile();
-
-    _support_skills_script.CloseTable();
-    _support_skills_script.CloseFile();
 
     _status_effects_script.CloseTable();
     _status_effects_script.CloseFile();
@@ -148,10 +153,6 @@ bool GameGlobal::_LoadGlobalScripts()
     if(!_items_script.OpenFile("dat/objects/items.lua"))
         return false;
     _items_script.OpenTable("items");
-
-    if(!_key_items_script.OpenFile("dat/objects/key_items.lua"))
-        return false;
-    _key_items_script.OpenTable("key_items");
 
     if(_weapons_script.OpenFile("dat/objects/weapons.lua") == false) {
         return false;
@@ -178,15 +179,15 @@ bool GameGlobal::_LoadGlobalScripts()
     }
     _leg_armor_script.OpenTable("armor");
 
-    if(_attack_skills_script.OpenFile("dat/skills/attack.lua") == false) {
+    if(_weapon_skills_script.OpenFile("dat/skills/weapon.lua") == false) {
         return false;
     }
-    _attack_skills_script.OpenTable("skills");
+    _weapon_skills_script.OpenTable("skills");
 
-    if(_support_skills_script.OpenFile("dat/skills/support.lua") == false) {
+    if(_magic_skills_script.OpenFile("dat/skills/magic.lua") == false) {
         return false;
     }
-    _support_skills_script.OpenTable("skills");
+    _magic_skills_script.OpenTable("skills");
 
     if(_special_skills_script.OpenFile("dat/skills/special.lua") == false) {
         return false;
@@ -232,7 +233,6 @@ void GameGlobal::ClearAllData()
     _inventory_arm_armor.clear();
     _inventory_leg_armor.clear();
     _inventory_shards.clear();
-    _inventory_key_items.clear();
 
     // Delete all characters
     for(std::map<uint32, GlobalCharacter *>::iterator it = _characters.begin(); it != _characters.end(); ++it) {
@@ -258,7 +258,8 @@ void GameGlobal::ClearAllData()
 
     // Clear out the map previous location
     _previous_location.clear();
-    _map_filename.clear();
+    _map_data_filename.clear();
+    _map_script_filename.clear();
     _map_hud_name.clear();
 
     //clear global world map file
@@ -414,7 +415,8 @@ void GameGlobal::AddToInventory(uint32 obj_id, uint32 obj_count)
     }
 
     // Otherwise create a new object instance and add it to the inventory
-    if((obj_id > 0) && (obj_id <= MAX_ITEM_ID)) {
+    if((obj_id > 0 && obj_id <= MAX_ITEM_ID)
+        || (obj_id > MAX_SHARD_ID && obj_id <= MAX_KEY_ITEM_ID)) {
         GlobalItem *new_obj = new GlobalItem(obj_id, obj_count);
         _inventory.insert(std::make_pair(obj_id, new_obj));
         _inventory_items.push_back(new_obj);
@@ -442,10 +444,6 @@ void GameGlobal::AddToInventory(uint32 obj_id, uint32 obj_count)
 // 		GlobalShard *new_obj = new GlobalShard(obj_id, obj_count);
 // 		_inventory.insert(std::make_pair(obj_id, new_obj));
 // 		_inventory_shards.push_back(new_obj);
-    } else if((obj_id > MAX_SHARD_ID) && (obj_id <= MAX_KEY_ITEM_ID)) {
-        GlobalKeyItem *new_obj = new GlobalKeyItem(obj_id, obj_count);
-        _inventory.insert(std::make_pair(obj_id, new_obj));
-        _inventory_key_items.push_back(new_obj);
     } else {
         IF_PRINT_WARNING(GLOBAL_DEBUG) << "attempted to add invalid object to inventory with id: " << obj_id << std::endl;
     }
@@ -471,7 +469,8 @@ void GameGlobal::AddToInventory(GlobalObject *object)
     }
 
     // Figure out which type of object this is, cast it to the correct type, and add it to the inventory
-    if((obj_id > 0) && (obj_id <= MAX_ITEM_ID)) {
+    if((obj_id > 0 && obj_id <= MAX_ITEM_ID)
+        || (obj_id > MAX_SHARD_ID && obj_id <= MAX_KEY_ITEM_ID)) {
         GlobalItem *new_obj = dynamic_cast<GlobalItem *>(object);
         _inventory.insert(std::make_pair(obj_id, new_obj));
         _inventory_items.push_back(new_obj);
@@ -499,10 +498,6 @@ void GameGlobal::AddToInventory(GlobalObject *object)
 // 		GlobalShard *new_obj = dynamic_cast<GlobalShard*>(object);
 // 		_inventory.insert(std::make_pair(obj_id, new_obj));
 // 		_inventory_shards.push_back(new_obj);
-    } else if((obj_id > MAX_SHARD_ID) && (obj_id <= MAX_KEY_ITEM_ID)) {
-        GlobalKeyItem *new_obj = dynamic_cast<GlobalKeyItem *>(object);
-        _inventory.insert(std::make_pair(obj_id, new_obj));
-        _inventory_key_items.push_back(new_obj);
     } else {
         IF_PRINT_WARNING(GLOBAL_DEBUG) << "attempted to add invalid object to inventory with id: " << obj_id << std::endl;
         delete object;
@@ -519,7 +514,8 @@ void GameGlobal::RemoveFromInventory(uint32 obj_id)
     }
 
     // Use the id value to figure out what type of object it is, and remove it from the object vector
-    if((obj_id > 0) && (obj_id <= MAX_ITEM_ID)) {
+    if((obj_id > 0 && obj_id <= MAX_ITEM_ID)
+        || (obj_id > MAX_SHARD_ID && obj_id <= MAX_KEY_ITEM_ID)) {
         if(_RemoveFromInventory(obj_id, _inventory_items) == false)
             IF_PRINT_WARNING(GLOBAL_DEBUG) << "object to remove was not found in inventory items: " << obj_id << std::endl;
     } else if((obj_id > MAX_ITEM_ID) && (obj_id <= MAX_WEAPON_ID)) {
@@ -540,9 +536,6 @@ void GameGlobal::RemoveFromInventory(uint32 obj_id)
     } else if((obj_id > MAX_LEG_ARMOR_ID) && (obj_id <= MAX_SHARD_ID)) {
         if(_RemoveFromInventory(obj_id, _inventory_shards) == false)
             IF_PRINT_WARNING(GLOBAL_DEBUG) << "object to remove was not found in inventory shards: " << obj_id << std::endl;
-    } else if((obj_id > MAX_SHARD_ID) && (obj_id <= MAX_KEY_ITEM_ID)) {
-        if(_RemoveFromInventory(obj_id, _inventory_key_items) == false)
-            IF_PRINT_WARNING(GLOBAL_DEBUG) << "object to remove was not found in inventory key items: " << obj_id << std::endl;
     } else {
         IF_PRINT_WARNING(GLOBAL_DEBUG) << "attempted to remove an object from inventory with an invalid id: " << obj_id << std::endl;
     }
@@ -559,7 +552,8 @@ GlobalObject *GameGlobal::RetrieveFromInventory(uint32 obj_id, bool all_counts)
 
     GlobalObject *return_object = NULL;
     // Use the id value to figure out what type of object it is, and remove it from the object vector
-    if((obj_id > 0) && (obj_id <= MAX_ITEM_ID)) {
+    if((obj_id > 0 && obj_id <= MAX_ITEM_ID)
+        || (obj_id > MAX_SHARD_ID && obj_id <= MAX_KEY_ITEM_ID)) {
         return_object = _RetrieveFromInventory(obj_id, _inventory_items, all_counts);
         if(return_object == NULL)
             IF_PRINT_WARNING(GLOBAL_DEBUG) << "object to retrieve was not found in inventory items: " << obj_id << std::endl;
@@ -587,10 +581,6 @@ GlobalObject *GameGlobal::RetrieveFromInventory(uint32 obj_id, bool all_counts)
         return_object = _RetrieveFromInventory(obj_id, _inventory_shards, all_counts);
         if(return_object == NULL)
             IF_PRINT_WARNING(GLOBAL_DEBUG) << "object to retrieve was not found in inventory shards: " << obj_id << std::endl;
-    } else if((obj_id > MAX_SHARD_ID) && (obj_id <= MAX_KEY_ITEM_ID)) {
-        return_object = _RetrieveFromInventory(obj_id, _inventory_key_items, all_counts);
-        if(return_object == NULL)
-            IF_PRINT_WARNING(GLOBAL_DEBUG) << "object to retrieve was not found in inventory key items: " << obj_id << std::endl;
     } else {
         IF_PRINT_WARNING(GLOBAL_DEBUG) << "attempted to retrieve an object from inventory with an invalid id: " << obj_id << std::endl;
     }
@@ -734,10 +724,13 @@ QuestLogInfo& GameGlobal::GetQuestInfo(const std::string &quest_id)
 // GameGlobal class - Other Functions
 ////////////////////////////////////////////////////////////////////////////////
 
-void GameGlobal::SetMap(const std::string &map_filename, const std::string &map_image_filename,
-                        const hoa_utils::ustring &map_hud_name)
+void GameGlobal::SetMap(const std::string &map_data_filename,
+                        const std::string &map_script_filename,
+                        const std::string &map_image_filename,
+                        const vt_utils::ustring &map_hud_name)
 {
-    _map_filename = map_filename;
+    _map_data_filename = map_data_filename;
+    _map_script_filename = map_script_filename;
 
     if(!_map_image.Load(map_image_filename))
         IF_PRINT_WARNING(GLOBAL_DEBUG) << "failed to load map image: " << map_image_filename << std::endl;
@@ -762,19 +755,20 @@ bool GameGlobal::SaveGame(const std::string &filename, uint32 slot_id, uint32 x_
         return false;
     }
 
-    // Write out namespace information
-    file.WriteNamespace("save_game1");
+    // Open the save_game1 table
+    file.WriteLine("save_game1 = {");
 
     // Save simple play data
     file.InsertNewLine();
-    file.WriteString("map_filename", _map_filename);
+    file.WriteLine("map_data_filename = \"" + _map_data_filename + "\",");
+    file.WriteLine("map_script_filename = \"" + _map_script_filename + "\",");
     //! \note Coords are in map tiles
-    file.WriteUInt("location_x", x_position);
-    file.WriteUInt("location_y", y_position);
-    file.WriteUInt("play_hours", SystemManager->GetPlayHours());
-    file.WriteUInt("play_minutes", SystemManager->GetPlayMinutes());
-    file.WriteUInt("play_seconds", SystemManager->GetPlaySeconds());
-    file.WriteUInt("drunes", _drunes);
+    file.WriteLine("location_x = " + NumberToString(x_position) + ",");
+    file.WriteLine("location_y = " + NumberToString(y_position) + ",");
+    file.WriteLine("play_hours = " + NumberToString(SystemManager->GetPlayHours()) + ",");
+    file.WriteLine("play_minutes = " + NumberToString(SystemManager->GetPlayMinutes()) + ",");
+    file.WriteLine("play_seconds = " + NumberToString(SystemManager->GetPlaySeconds()) + ",");
+    file.WriteLine("drunes = " + NumberToString(_drunes) + ",");
 
     // Save the inventory (object id + object count pairs)
     // NOTE: This does not save any weapons/armor that are equipped on the characters. That data
@@ -786,7 +780,6 @@ bool GameGlobal::SaveGame(const std::string &filename, uint32 slot_id, uint32 x_
     _SaveInventory(file, "arm_armor", _inventory_arm_armor);
     _SaveInventory(file, "leg_armor", _inventory_leg_armor);
     _SaveInventory(file, "shards", _inventory_shards);
-    _SaveInventory(file, "key_items", _inventory_key_items);
 
     // ----- (5) Save character data
     file.InsertNewLine();
@@ -799,7 +792,7 @@ bool GameGlobal::SaveGame(const std::string &filename, uint32 slot_id, uint32 x_
         else
             file.WriteLine(", " + NumberToString(_ordered_characters[i]->GetID()), false);
     }
-    file.WriteLine("\n\t},");
+    file.WriteLine("\n\t},"); // order
 
     // Now save each individual character's data
     for(uint32 i = 0; i < _ordered_characters.size(); i++) {
@@ -808,7 +801,7 @@ bool GameGlobal::SaveGame(const std::string &filename, uint32 slot_id, uint32 x_
         else
             _SaveCharacter(file, _ordered_characters[i], false);
     }
-    file.WriteLine("}");
+    file.WriteLine("},"); // characters
 
     // ----- (6) Save event data
     file.InsertNewLine();
@@ -816,14 +809,14 @@ bool GameGlobal::SaveGame(const std::string &filename, uint32 slot_id, uint32 x_
     for(std::map<std::string, GlobalEventGroup *>::iterator it = _event_groups.begin(); it != _event_groups.end(); ++it) {
         _SaveEvents(file, it->second);
     }
-    file.WriteLine("}");
+    file.WriteLine("},");
     file.InsertNewLine();
 
     // ------ (7) Save quest log
     file.WriteLine("quest_log = {");
     for(std::map<std::string, QuestLogEntry *>::const_iterator itr = _quest_log_entries.begin(); itr != _quest_log_entries.end(); ++itr)
         _SaveQuests(file, itr->second);
-    file.WriteLine("}");
+    file.WriteLine("},");
     file.InsertNewLine();
 
     // ------ (8) Save World Map
@@ -837,6 +830,9 @@ bool GameGlobal::SaveGame(const std::string &filename, uint32 slot_id, uint32 x_
             file.ClearErrors();
         }
     }
+
+    file.InsertNewLine();
+    file.WriteLine("} -- save_game1"); //save_game1
 
     file.CloseFile();
 
@@ -857,10 +853,31 @@ bool GameGlobal::LoadGame(const std::string &filename, uint32 slot_id)
     ClearAllData();
 
     // open the namespace that the save game is encapsulated in.
-    file.OpenTable("save_game1");
+    if (!file.OpenTable("save_game1")) {
+        PRINT_ERROR << "Couldn't open the savegame " << filename << std::endl;
+        return false;
+    }
 
     // Load play data
-    _map_filename = file.ReadString("map_filename");
+    // DEPRECATED: Old way to load, will be removed in a release
+    if (file.DoesStringExist("map_filename")) {
+        _map_data_filename = file.ReadString("map_filename");
+        _map_script_filename = file.ReadString("map_filename");
+    }
+    else {
+        // New way: data and script are separated.
+        _map_data_filename = file.ReadString("map_data_filename");
+        _map_script_filename = file.ReadString("map_script_filename");
+    }
+
+    // DEPRECATED: Remove in one release
+    // Hack to permit the split of last map data and scripts.
+    if (!_map_data_filename.empty() && _map_data_filename == _map_script_filename) {
+        std::string map_common_name = _map_data_filename.substr(0, _map_data_filename.length() - 4);
+        _map_data_filename = map_common_name + "_map.lua";
+        _map_script_filename = map_common_name + "_script.lua";
+    }
+
     // Load a potential saved position
     _x_save_map_position = file.ReadUInt("location_x");
     _y_save_map_position = file.ReadUInt("location_y");
@@ -879,32 +896,62 @@ bool GameGlobal::LoadGame(const std::string &filename, uint32 slot_id)
     _LoadInventory(file, "arm_armor");
     _LoadInventory(file, "leg_armor");
     _LoadInventory(file, "shards");
-    _LoadInventory(file, "key_items");
+    _LoadInventory(file, "key_items"); // DEPRECATED: Remove in one release
 
     // Load characters into the party in the correct order
-    file.OpenTable("characters");
+    if (!file.OpenTable("characters")) {
+        PRINT_ERROR << "Couldn't open the savegame characters data in " << filename << std::endl;
+        file.CloseAllTables();
+        file.CloseFile();
+        return false;
+    }
+
+    if (!file.DoesTableExist("order")) {
+        PRINT_ERROR << "Couldn't open the savegame characters order data in " << filename << std::endl;
+        file.CloseAllTables();
+        file.CloseFile();
+        return false;
+    }
+
     std::vector<uint32> char_ids;
     file.ReadUIntVector("order", char_ids);
+
+    if (char_ids.empty()) {
+        PRINT_ERROR << "No valid characters id in " << filename << std::endl;
+        file.CloseAllTables();
+        file.CloseFile();
+        return false;
+    }
+
     for(uint32 i = 0; i < char_ids.size(); i++) {
         _LoadCharacter(file, char_ids[i]);
     }
-    file.CloseTable();
+    file.CloseTable(); // characters
+
+    if (_characters.empty()) {
+        PRINT_ERROR << "No characters were added by save game file: " << filename << std::endl;
+        file.CloseAllTables();
+        file.CloseFile();
+        return false;
+    }
 
     // Load event data
     std::vector<std::string> group_names;
-    file.OpenTable("event_groups");
-    file.ReadTableKeys(group_names);
-    for(uint32 i = 0; i < group_names.size(); i++)
-        _LoadEvents(file, group_names[i]);
-    file.CloseTable();
+    if (file.OpenTable("event_groups")) {
+        file.ReadTableKeys(group_names);
+        for(uint32 i = 0; i < group_names.size(); i++)
+            _LoadEvents(file, group_names[i]);
+        file.CloseTable();
+    }
 
     // Load the quest log data
     std::vector<std::string> quest_keys;
-    file.OpenTable("quest_log");
-    file.ReadTableKeys(quest_keys);
-    for(uint32 i = 0; i < quest_keys.size(); ++i)
-        _LoadQuests(file, quest_keys[i]);
-    file.CloseTable();
+    if (file.OpenTable("quest_log")) {
+        file.ReadTableKeys(quest_keys);
+        for(uint32 i = 0; i < quest_keys.size(); ++i)
+            _LoadQuests(file, quest_keys[i]);
+        file.CloseTable();
+    }
 
     // Load the world map data
     _LoadWorldMap(file);
@@ -931,7 +978,7 @@ void GameGlobal::LoadEmotes(const std::string &emotes_filename)
     // First, clear the list in case of reloading
     _emotes.clear();
 
-    hoa_script::ReadScriptDescriptor emotes_script;
+    vt_script::ReadScriptDescriptor emotes_script;
     if(!emotes_script.OpenFile(emotes_filename))
         return;
 
@@ -957,16 +1004,16 @@ void GameGlobal::LoadEmotes(const std::string &emotes_filename)
         if(anim.LoadFromAnimationScript(animation_file)) {
             // NOTE: The map mode should one day be fixed to use the same coords
             // than everything else, thus making possible to remove this
-            hoa_map::MapMode::ScaleToMapCoords(anim);
+            vt_map::MapMode::ScaleToMapCoords(anim);
 
             _emotes.insert(std::make_pair(emotes_id[i], anim));
 
             // The vector containing the offsets
             std::vector<std::pair<float, float> > emote_offsets;
-            emote_offsets.resize(hoa_map::private_map::NUM_ANIM_DIRECTIONS);
+            emote_offsets.resize(vt_map::private_map::NUM_ANIM_DIRECTIONS);
 
             // For each directions
-            for(uint32 j = 0; j < hoa_map::private_map::NUM_ANIM_DIRECTIONS; ++j) {
+            for(uint32 j = 0; j < vt_map::private_map::NUM_ANIM_DIRECTIONS; ++j) {
                 emotes_script.OpenTable(j);
 
                 std::pair<float, float> offsets;
@@ -987,13 +1034,13 @@ void GameGlobal::LoadEmotes(const std::string &emotes_filename)
     emotes_script.CloseFile();
 }
 
-void GameGlobal::GetEmoteOffset(float &x, float &y, const std::string &emote_id, hoa_map::private_map::ANIM_DIRECTIONS dir)
+void GameGlobal::GetEmoteOffset(float &x, float &y, const std::string &emote_id, vt_map::private_map::ANIM_DIRECTIONS dir)
 {
 
     x = 0.0f;
     y = 0.0f;
 
-    if(dir < hoa_map::private_map::ANIM_SOUTH || dir >= hoa_map::private_map::NUM_ANIM_DIRECTIONS)
+    if(dir < vt_map::private_map::ANIM_SOUTH || dir >= vt_map::private_map::NUM_ANIM_DIRECTIONS)
         return;
 
     std::map<std::string, std::vector<std::pair<float, float> > >::const_iterator it =
@@ -1084,8 +1131,8 @@ void GameGlobal::_SaveCharacter(WriteScriptDescriptor &file, GlobalCharacter *ch
     std::vector<GlobalSkill *>* skill_vector;
 
     file.InsertNewLine();
-    file.WriteLine("\t\tattack_skills = {");
-    skill_vector = character->GetAttackSkills();
+    file.WriteLine("\t\tweapon_skills = {");
+    skill_vector = character->GetWeaponSkills();
     for(uint32 i = 0; i < skill_vector->size(); i++) {
         if(i == 0)
             file.WriteLine("\t\t\t", false);
@@ -1096,8 +1143,8 @@ void GameGlobal::_SaveCharacter(WriteScriptDescriptor &file, GlobalCharacter *ch
     file.WriteLine("\n\t\t},");
 
     file.InsertNewLine();
-    file.WriteLine("\t\tsupport_skills = {");
-    skill_vector = character->GetSupportSkills();
+    file.WriteLine("\t\tmagic_skills = {");
+    skill_vector = character->GetMagicSkills();
     for(uint32 i = 0; i < skill_vector->size(); i++) {
         if(i == 0)
             file.WriteLine("\t\t\t", false);
@@ -1117,117 +1164,7 @@ void GameGlobal::_SaveCharacter(WriteScriptDescriptor &file, GlobalCharacter *ch
             file.WriteLine(", ", false);
         file.WriteLine(NumberToString(skill_vector->at(i)->GetID()), false);
     }
-    file.WriteLine("\n\t\t},");
-
-    file.InsertNewLine();
-    file.WriteLine("\t\tnew_skills_learned = {");
-    skill_vector = character->GetNewSkillsLearned();
-    for(uint32 i = 0; i < skill_vector->size(); i++) {
-        if(i == 0)
-            file.WriteLine("\t\t\t", false);
-        else
-            file.WriteLine(", ", false);
-        file.WriteLine(NumberToString(skill_vector->at(i)->GetID()), false);
-    }
-    file.WriteLine("\n\t\t},");
-
-    // ----- (4): Write out the character's growth data
-    if(character->HasUnacknowledgedGrowth() == true) {
-        IF_PRINT_WARNING(GLOBAL_DEBUG) << "discovered unacknowledged character growth while saving game file" << std::endl;
-    }
-
-    file.InsertNewLine();
-    file.WriteLine("\t\tgrowth = {");
-    file.WriteLine("\t\t\texperience_for_next_level = " + NumberToString(character->_experience_for_next_level) + ",");
-
-    file.WriteLine("\t\t\thit_points = { ");
-    for(uint32 i = 0; i < character->_hit_points_periodic_growth.size(); i++) {
-        if(i == 0)
-            file.WriteLine("\t\t\t\t", false);
-        else
-            file.WriteLine(", ", false);
-        file.WriteLine("[" + NumberToString(character->_hit_points_periodic_growth[i].first) + "] = "
-                       + NumberToString(character->_hit_points_periodic_growth[i].second), false);
-    }
-    file.WriteLine("\n\t\t\t},");
-
-    file.WriteLine("\t\t\tskill_points = { ");
-    for(uint32 i = 0; i < character->_skill_points_periodic_growth.size(); i++) {
-        if(i == 0)
-            file.WriteLine("\t\t\t\t", false);
-        else
-            file.WriteLine(", ", false);
-        file.WriteLine("[" + NumberToString(character->_skill_points_periodic_growth[i].first) + "] = "
-                       + NumberToString(character->_skill_points_periodic_growth[i].second), false);
-    }
-    file.WriteLine("\n\t\t\t},");
-
-    file.WriteLine("\t\t\tstrength = { ");
-    for(uint32 i = 0; i < character->_strength_periodic_growth.size(); i++) {
-        if(i == 0)
-            file.WriteLine("\t\t\t\t", false);
-        else
-            file.WriteLine(", ", false);
-        file.WriteLine("[" + NumberToString(character->_strength_periodic_growth[i].first) + "] = "
-                       + NumberToString(character->_strength_periodic_growth[i].second), false);
-    }
-    file.WriteLine("\n\t\t\t},");
-
-    file.WriteLine("\t\t\tvigor = { ");
-    for(uint32 i = 0; i < character->_vigor_periodic_growth.size(); i++) {
-        if(i == 0)
-            file.WriteLine("\t\t\t\t", false);
-        else
-            file.WriteLine(", ", false);
-        file.WriteLine("[" + NumberToString(character->_vigor_periodic_growth[i].first) + "] = "
-                       + NumberToString(character->_vigor_periodic_growth[i].second), false);
-    }
-    file.WriteLine("\n\t\t\t},");
-
-    file.WriteLine("\t\t\tfortitude = { ");
-    for(uint32 i = 0; i < character->_fortitude_periodic_growth.size(); i++) {
-        if(i == 0)
-            file.WriteLine("\t\t\t\t", false);
-        else
-            file.WriteLine(", ", false);
-        file.WriteLine("[" + NumberToString(character->_fortitude_periodic_growth[i].first) + "] = "
-                       + NumberToString(character->_fortitude_periodic_growth[i].second), false);
-    }
-    file.WriteLine("\n\t\t\t},");
-
-    file.WriteLine("\t\t\tprotection = { ");
-    for(uint32 i = 0; i < character->_protection_periodic_growth.size(); i++) {
-        if(i == 0)
-            file.WriteLine("\t\t\t\t", false);
-        else
-            file.WriteLine(", ", false);
-        file.WriteLine("[" + NumberToString(character->_protection_periodic_growth[i].first) + "] = "
-                       + NumberToString(character->_protection_periodic_growth[i].second), false);
-    }
-    file.WriteLine("\n\t\t\t},");
-
-    file.WriteLine("\t\t\tagility = { ");
-    for(uint32 i = 0; i < character->_agility_periodic_growth.size(); i++) {
-        if(i == 0)
-            file.WriteLine("\t\t\t\t", false);
-        else
-            file.WriteLine(", ", false);
-        file.WriteLine("[" + NumberToString(character->_agility_periodic_growth[i].first) + "] = "
-                       + NumberToString(character->_agility_periodic_growth[i].second), false);
-    }
-    file.WriteLine("\n\t\t\t},");
-
-    file.WriteLine("\t\t\tevade = { ");
-    for(uint32 i = 0; i < character->_evade_periodic_growth.size(); i++) {
-        if(i == 0)
-            file.WriteLine("\t\t\t\t", false);
-        else
-            file.WriteLine(", ", false);
-        file.WriteLine("[" + NumberToString(character->_evade_periodic_growth[i].first) + "] = "
-                       + NumberToString(character->_evade_periodic_growth[i].second), false);
-    }
-    file.WriteLine("\n\t\t\t},");
-    file.WriteLine("\t\t}");
+    file.WriteLine("\n\t\t}");
 
     if(last)
         file.WriteLine("\t}");
@@ -1250,14 +1187,24 @@ void GameGlobal::_SaveEvents(WriteScriptDescriptor &file, GlobalEventGroup *even
 
     file.WriteLine("\t" + event_group->GetGroupName() + " = {");
 
+    uint32 i = 0;
     for(std::map<std::string, int32>::const_iterator it = event_group->GetEvents().begin(); it != event_group->GetEvents().end(); ++it) {
         if(it == event_group->GetEvents().begin())
             file.WriteLine("\t\t", false);
         else
             file.WriteLine(", ", false);
+
+        // Add a new line every 4 entries for better readability and debugging
+        if ((i > 0) && !(i % 4)) {
+            file.InsertNewLine();
+            file.WriteLine("\t\t", false);
+        }
+
         file.WriteLine("[\"" + it->first + "\"] = " + NumberToString(it->second), false);
+
+        ++i;
     }
-    file.WriteLine("\t},");
+    file.WriteLine("\n\t},");
 
 }
 
@@ -1287,17 +1234,16 @@ void GameGlobal::_SaveQuests(WriteScriptDescriptor &file, const QuestLogEntry *q
 
 }
 
-void GameGlobal::_SaveWorldMap(hoa_script::WriteScriptDescriptor &file)
+void GameGlobal::_SaveWorldMap(vt_script::WriteScriptDescriptor &file)
 {
-    if(file.IsFileOpen() == false)
-    {
+    if(!file.IsFileOpen()) {
         IF_PRINT_WARNING(GLOBAL_DEBUG) << "the file provided in the function argument was not open" << std::endl;
         return;
     }
 
     //write the world map filename
-    file.WriteLine("world_map = \"" + GetWorldMapFilename() + "\"");
-    file.WriteLine("");
+    file.WriteLine("world_map = \"" + GetWorldMapFilename() + "\",");
+    file.InsertNewLine();
 
     //write the viewable locations
     file.WriteLine("viewable_locations = {");
@@ -1314,43 +1260,48 @@ void GameGlobal::_LoadInventory(ReadScriptDescriptor &file, const std::string &c
         return;
     }
 
-    std::vector<uint32> object_ids;
-
     // The table keys are the inventory object ID numbers. The value of each key is the count of that object
-    file.OpenTable(category_name);
-    file.ReadTableKeys(object_ids);
-    for(uint32 i = 0; i < object_ids.size(); i++) {
-        AddToInventory(object_ids[i], file.ReadUInt(object_ids[i]));
+    if (file.OpenTable(category_name)) {
+        std::vector<uint32> object_ids;
+        file.ReadTableKeys(object_ids);
+        for(uint32 i = 0; i < object_ids.size(); i++) {
+            AddToInventory(object_ids[i], file.ReadUInt(object_ids[i]));
+        }
+        file.CloseTable();
     }
-    file.CloseTable();
 }
 
 
 
 void GameGlobal::_LoadCharacter(ReadScriptDescriptor &file, uint32 id)
 {
-    if(file.IsFileOpen() == false) {
-        IF_PRINT_WARNING(GLOBAL_DEBUG) << "the file provided in the function argument was not open" << std::endl;
+    if(!file.IsFileOpen()) {
+        PRINT_WARNING << "Can't load character, the file " << file.GetFilename()
+            << " is not open." << std::endl;
         return;
     }
 
-    // ----- (1): Create a new GlobalCharacter object using the provided id
-    // This loads all of the character's "static" data, such as their name, etc.
-    GlobalCharacter *character = new GlobalCharacter(id, false);
-
     // This function assumes that the characters table in the saved game file is already open.
     // So all we need to open is the character's table
-    file.OpenTable(id);
+    if (!file.OpenTable(id)) {
+        PRINT_WARNING << "Can't load unexisting character id: " << id << std::endl;
+        return;
+    }
+
+    // Create a new GlobalCharacter object using the provided id
+    // This loads all of the character's "static" data, such as their name, etc.
+    GlobalCharacter *character = new GlobalCharacter(id, false);
 
     // Gets whether the character is currently enabled
     if(file.DoesBoolExist("enabled"))
         character->Enable(file.ReadBool("enabled"));
-    else // old format
+    else // old format DEPRECATED: Removed in one release
         character->Enable(true);
 
-    // ----- (2): Read in all of the character's stats data
+    // Read in all of the character's stats data
     character->SetExperienceLevel(file.ReadUInt("experience_level"));
     character->SetExperiencePoints(file.ReadUInt("experience_points"));
+    character->_experience_for_next_level = file.ReadInt("experience_points_next");
 
     character->SetMaxHitPoints(file.ReadUInt("max_hit_points"));
     character->SetHitPoints(file.ReadUInt("hit_points"));
@@ -1364,49 +1315,50 @@ void GameGlobal::_LoadCharacter(ReadScriptDescriptor &file, uint32 id)
     character->SetAgility(file.ReadUInt("agility"));
     character->SetEvade(file.ReadFloat("evade"));
 
-    // ----- (3): Read the character's equipment and load it onto the character
-    file.OpenTable("equipment");
-    uint32 equip_id;
+    // Read the character's equipment and load it onto the character
+    if (file.OpenTable("equipment")) {
+        uint32 equip_id;
 
-    // Equip the objects on the character as long as valid equipment IDs were read
-    equip_id = file.ReadUInt("weapon");
-    if(equip_id != 0) {
-        character->EquipWeapon(new GlobalWeapon(equip_id));
+        // Equip the objects on the character as long as valid equipment IDs were read
+        equip_id = file.ReadUInt("weapon");
+        if(equip_id != 0) {
+            character->EquipWeapon(new GlobalWeapon(equip_id));
+        }
+
+        equip_id = file.ReadUInt("head_armor");
+        if(equip_id != 0) {
+            character->EquipHeadArmor(new GlobalArmor(equip_id));
+        }
+
+        equip_id = file.ReadUInt("torso_armor");
+        if(equip_id != 0) {
+            character->EquipTorsoArmor(new GlobalArmor(equip_id));
+        }
+
+        equip_id = file.ReadUInt("arm_armor");
+        if(equip_id != 0) {
+            character->EquipArmArmor(new GlobalArmor(equip_id));
+        }
+
+        equip_id = file.ReadUInt("leg_armor");
+        if(equip_id != 0) {
+            character->EquipLegArmor(new GlobalArmor(equip_id));
+        }
+
+        file.CloseTable(); // equipment
     }
 
-    equip_id = file.ReadUInt("head_armor");
-    if(equip_id != 0) {
-        character->EquipHeadArmor(new GlobalArmor(equip_id));
-    }
-
-    equip_id = file.ReadUInt("torso_armor");
-    if(equip_id != 0) {
-        character->EquipTorsoArmor(new GlobalArmor(equip_id));
-    }
-
-    equip_id = file.ReadUInt("arm_armor");
-    if(equip_id != 0) {
-        character->EquipArmArmor(new GlobalArmor(equip_id));
-    }
-
-    equip_id = file.ReadUInt("leg_armor");
-    if(equip_id != 0) {
-        character->EquipLegArmor(new GlobalArmor(equip_id));
-    }
-
-    file.CloseTable();
-
-    // ----- (4): Read the character's skills and pass those onto the character object
+    // Read the character's skills and pass those onto the character object
     std::vector<uint32> skill_ids;
 
     skill_ids.clear();
-    file.ReadUIntVector("attack_skills", skill_ids);
+    file.ReadUIntVector("weapon_skills", skill_ids);
     for(uint32 i = 0; i < skill_ids.size(); i++) {
         character->AddSkill(skill_ids[i]);
     }
 
     skill_ids.clear();
-    file.ReadUIntVector("support_skills", skill_ids);
+    file.ReadUIntVector("magic_skills", skill_ids);
     for(uint32 i = 0; i < skill_ids.size(); ++i) {
         character->AddSkill(skill_ids[i]);
     }
@@ -1423,93 +1375,19 @@ void GameGlobal::_LoadCharacter(ReadScriptDescriptor &file, uint32 id)
     for(uint32 i = 0; i < skill_ids.size(); ++i) {
         character->AddSkill(skill_ids[i]);
     }
-
-    skill_ids.clear();
-    file.ReadUIntVector("new_skills_learned", skill_ids);
-    std::vector<GlobalSkill*>* new_skills = character->GetNewSkillsLearned();
+    // DEPRECATED: Remove in one release
+    file.ReadUIntVector("attack_skills", skill_ids);
     for(uint32 i = 0; i < skill_ids.size(); i++) {
-        GlobalSkill* skill = character->GetSkill(skill_ids[i]);
-        if (skill == NULL) {
-            IF_PRINT_WARNING(GLOBAL_DEBUG) << "new skill learned was not found in character's existing set of skills: " << skill_ids[i] << std::endl;
-        }
-        else {
-            new_skills->push_back(skill);
-        }
+        character->AddSkill(skill_ids[i]);
+    }
+    // DEPRECATED: Remove in one release
+    skill_ids.clear();
+    file.ReadUIntVector("support_skills", skill_ids);
+    for(uint32 i = 0; i < skill_ids.size(); ++i) {
+        character->AddSkill(skill_ids[i]);
     }
 
-    // ----- (5): Reset the character's growth from the saved data
-    std::vector<uint32> growth_keys;
-
-    file.OpenTable("growth");
-
-    character->_experience_for_next_level = file.ReadInt("experience_for_next_level");
-
-    growth_keys.clear();
-    file.OpenTable("hit_points");
-    file.ReadTableKeys(growth_keys);
-    for(uint32 i = 0; i < growth_keys.size(); i++) {
-        character->_hit_points_periodic_growth.push_back(std::make_pair(growth_keys[i], file.ReadUInt(growth_keys[i])));
-    }
-    file.CloseTable();
-
-    growth_keys.clear();
-    file.OpenTable("skill_points");
-    file.ReadTableKeys(growth_keys);
-    for(uint32 i = 0; i < growth_keys.size(); i++) {
-        character->_skill_points_periodic_growth.push_back(std::make_pair(growth_keys[i], file.ReadUInt(growth_keys[i])));
-    }
-    file.CloseTable();
-
-    growth_keys.clear();
-    file.OpenTable("strength");
-    file.ReadTableKeys(growth_keys);
-    for(uint32 i = 0; i < growth_keys.size(); i++) {
-        character->_strength_periodic_growth.push_back(std::make_pair(growth_keys[i], file.ReadUInt(growth_keys[i])));
-    }
-    file.CloseTable();
-
-    growth_keys.clear();
-    file.OpenTable("vigor");
-    file.ReadTableKeys(growth_keys);
-    for(uint32 i = 0; i < growth_keys.size(); i++) {
-        character->_vigor_periodic_growth.push_back(std::make_pair(growth_keys[i], file.ReadUInt(growth_keys[i])));
-    }
-    file.CloseTable();
-
-    growth_keys.clear();
-    file.OpenTable("fortitude");
-    file.ReadTableKeys(growth_keys);
-    for(uint32 i = 0; i < growth_keys.size(); i++) {
-        character->_fortitude_periodic_growth.push_back(std::make_pair(growth_keys[i], file.ReadUInt(growth_keys[i])));
-    }
-    file.CloseTable();
-
-    growth_keys.clear();
-    file.OpenTable("protection");
-    file.ReadTableKeys(growth_keys);
-    for(uint32 i = 0; i < growth_keys.size(); i++) {
-        character->_protection_periodic_growth.push_back(std::make_pair(growth_keys[i], file.ReadUInt(growth_keys[i])));
-    }
-    file.CloseTable();
-
-    growth_keys.clear();
-    file.OpenTable("agility");
-    file.ReadTableKeys(growth_keys);
-    for(uint32 i = 0; i < growth_keys.size(); i++) {
-        character->_agility_periodic_growth.push_back(std::make_pair(growth_keys[i], file.ReadUInt(growth_keys[i])));
-    }
-    file.CloseTable();
-
-    growth_keys.clear();
-    file.OpenTable("evade");
-    file.ReadTableKeys(growth_keys);
-    for(uint32 i = 0; i < growth_keys.size(); i++) {
-        character->_evade_periodic_growth.push_back(std::make_pair(growth_keys[i], file.ReadFloat(growth_keys[i])));
-    }
-    file.CloseTable();
-
-    file.CloseTable();
-    file.CloseTable();
+    file.CloseTable(); // character id
 
     AddCharacter(character);
 } // void GameGlobal::_LoadCharacter(ReadScriptDescriptor& file, uint32 id);
@@ -1528,12 +1406,17 @@ void GameGlobal::_LoadEvents(ReadScriptDescriptor &file, const std::string &grou
 
     std::vector<std::string> event_names;
 
-    file.OpenTable(group_name);
-    file.ReadTableKeys(event_names);
-    for(uint32 i = 0; i < event_names.size(); i++) {
-        new_group->AddNewEvent(event_names[i], file.ReadInt(event_names[i]));
+    if (file.OpenTable(group_name)) {
+        file.ReadTableKeys(event_names);
+        for(uint32 i = 0; i < event_names.size(); i++) {
+            new_group->AddNewEvent(event_names[i], file.ReadInt(event_names[i]));
+        }
+        file.CloseTable();
     }
-    file.CloseTable();
+    else {
+        PRINT_ERROR << "Invalid event group name '" << group_name << " in save file "
+                << file.GetFilename() << std::endl;
+    }
 }
 
 void GameGlobal::_LoadQuests(ReadScriptDescriptor &file, const std::string &quest_id)
@@ -1568,7 +1451,7 @@ void GameGlobal::_LoadQuests(ReadScriptDescriptor &file, const std::string &ques
 
 }
 
-void GameGlobal::_LoadWorldMap(hoa_script::ReadScriptDescriptor &file)
+void GameGlobal::_LoadWorldMap(vt_script::ReadScriptDescriptor &file)
 {
     if(file.IsFileOpen() == false) {
         IF_PRINT_WARNING(GLOBAL_DEBUG) << "the file provided in the function argument was not open" << std::endl;
@@ -1587,7 +1470,7 @@ bool GameGlobal::_LoadWorldLocationsScript(const std::string &world_locations_fi
 {
     _world_map_locations.clear();
 
-    hoa_script::ReadScriptDescriptor world_locations_script;
+    vt_script::ReadScriptDescriptor world_locations_script;
     if(!world_locations_script.OpenFile(world_locations_filename)) {
         PRINT_ERROR << "Couldn't open world map locations file: " << world_locations_filename << std::endl;
         return false;
@@ -1642,7 +1525,7 @@ bool GameGlobal::_LoadQuestsScript(const std::string& quests_script_filename)
     // First clear the existing quests entries in case of a reloading.
     _quest_log_info.clear();
 
-    hoa_script::ReadScriptDescriptor quests_script;
+    vt_script::ReadScriptDescriptor quests_script;
     if(!quests_script.OpenFile(quests_script_filename)) {
         PRINT_ERROR << "Couldn't open quests file: " << quests_script_filename
                     << std::endl;
@@ -1705,5 +1588,5 @@ bool GameGlobal::_LoadQuestsScript(const std::string& quests_script_filename)
     return true;
 }
 
-} // namespace hoa_global
+} // namespace vt_global
 

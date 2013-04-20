@@ -1,5 +1,6 @@
 ///////////////////////////////////////////////////////////////////////////////
-//            Copyright (C) 2004-2010 by The Allacrost Project
+//            Copyright (C) 2004-2011 by The Allacrost Project
+//            Copyright (C) 2012-2013 by Bertram (Valyria Tear)
 //                         All Rights Reserved
 //
 // This code is licensed under the GNU GPL version 2. It is free software
@@ -10,6 +11,7 @@
 /** ****************************************************************************
 *** \file    shop_utils.cpp
 *** \author  Tyler Olsen, roots@allacrost.org
+*** \author  Yohann Ferreira, yohann ferreira orange fr
 *** \brief   Source file for shop mode utility code.
 ***
 *** This file contains utility code that is shared among the various shop mode
@@ -23,14 +25,14 @@
 #include "shop_utils.h"
 #include "shop.h"
 
-using namespace hoa_utils;
-using namespace hoa_system;
-using namespace hoa_video;
-using namespace hoa_gui;
+using namespace vt_utils;
+using namespace vt_system;
+using namespace vt_video;
+using namespace vt_gui;
 
-using namespace hoa_global;
+using namespace vt_global;
 
-namespace hoa_shop
+namespace vt_shop
 {
 
 namespace private_shop
@@ -75,9 +77,6 @@ SHOP_OBJECT ShopObject::DetermineShopObjectType(GLOBAL_OBJECT global_type)
         break;
     case GLOBAL_OBJECT_SHARD:
         shop_type = SHOP_OBJECT_SHARD;
-        break;
-    case GLOBAL_OBJECT_KEY_ITEM:
-        shop_type = SHOP_OBJECT_KEY_ITEM;
         break;
     case GLOBAL_OBJECT_INVALID:
     case GLOBAL_OBJECT_TOTAL:
@@ -336,7 +335,7 @@ ObjectCategoryDisplay::ObjectCategoryDisplay() :
     _name_text.SetStyle(TextStyle("text22"));
 
     _name_textbox.SetOwner(ShopMode::CurrentInstance()->GetMiddleWindow());
-    _name_textbox.SetPosition(25.0f, 175.0f);
+    _name_textbox.SetPosition(25.0f, 225.0f);
     _name_textbox.SetDimensions(125.0f, 30.0f);
     _name_textbox.SetTextStyle(TextStyle("text22"));
     _name_textbox.SetDisplayMode(VIDEO_TEXT_FADECHAR);
@@ -373,7 +372,7 @@ void ObjectCategoryDisplay::Draw()
     VideoManager->SetDrawFlags(VIDEO_X_CENTER, VIDEO_Y_CENTER, 0);
 
     if(_view_mode == SHOP_VIEW_MODE_LIST) {
-        VideoManager->Move(200.0f, 410.0f);
+        VideoManager->Move(200.0f, 358.0f);
 
         if(_transition_timer.IsRunning() == true) {
             // Alpha ranges from 0.0f at timer start to 1.0f at end
@@ -388,9 +387,9 @@ void ObjectCategoryDisplay::Draw()
         }
         _name_textbox.Draw();
     } else if((_view_mode == SHOP_VIEW_MODE_INFO) && (_selected_object != NULL)) {
-        VideoManager->Move(200.0f, 165.0f);
+        VideoManager->Move(200.0f, 603.0f);
         _object_icon->Draw();
-        VideoManager->MoveRelative(0.0f, -45.0f);
+        VideoManager->MoveRelative(0.0f, 45.0f);
         _name_text.Draw();
     }
 }
@@ -431,7 +430,7 @@ void ObjectCategoryDisplay::SetSelectedObject(ShopObject *shop_object)
     } else {
         GLOBAL_OBJECT object_type = _selected_object->GetObject()->GetObjectType();
         _name_text.SetText(*(ShopMode::CurrentInstance()->Media()->GetCategoryName(object_type)));
-        _object_icon = ShopMode::CurrentInstance()->Media()->GetCategoryIcon(object_type);
+        _object_icon = GlobalManager->Media().GetItemCategoryIcon(object_type);
     }
 }
 
@@ -461,18 +460,18 @@ void ObjectCategoryDisplay::ChangeCategory(ustring &name, const StillImage *icon
 ObjectListDisplay::ObjectListDisplay()
 {
     _identify_list.SetOwner(ShopMode::CurrentInstance()->GetMiddleWindow());
-    _identify_list.SetPosition(180.0f, 330.0f);
+    _identify_list.SetPosition(180.0f, 70.0f);
     _identify_list.SetDimensions(300.0f, 300.0f, 1, 255, 1, 8);
     _identify_list.SetOptionAlignment(VIDEO_X_LEFT, VIDEO_Y_CENTER);
     _identify_list.SetTextStyle(TextStyle("text22"));
     _identify_list.SetCursorState(VIDEO_CURSOR_STATE_VISIBLE);
     _identify_list.SetSelectMode(VIDEO_SELECT_SINGLE);
-    _identify_list.SetCursorOffset(-50.0f, 20.0f);
+    _identify_list.SetCursorOffset(-50.0f, -20.0f);
     _identify_list.SetHorizontalWrapMode(VIDEO_WRAP_MODE_NONE);
     _identify_list.SetVerticalWrapMode(VIDEO_WRAP_MODE_STRAIGHT);
 
     _property_list.SetOwner(ShopMode::CurrentInstance()->GetMiddleWindow());
-    _property_list.SetPosition(480.0f, 330.0f);
+    _property_list.SetPosition(480.0f, 70.0f);
     if(ShopMode::CurrentInstance()->GetState() == SHOP_STATE_SELL) {
         _property_list.SetDimensions(300.0f, 300.0f, 2, 255, 2, 8);
     } else {
@@ -571,4 +570,4 @@ void ObjectListDisplay::Draw()
 
 } // namespace private_shop
 
-} // namespace hoa_shop
+} // namespace vt_shop

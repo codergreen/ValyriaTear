@@ -1,5 +1,6 @@
 ///////////////////////////////////////////////////////////////////////////////
-//            Copyright (C) 2004-2010 by The Allacrost Project
+//            Copyright (C) 2004-2011 by The Allacrost Project
+//            Copyright (C) 2012-2013 by Bertram (Valyria Tear)
 //                         All Rights Reserved
 //
 // This code is licensed under the GNU GPL version 2. It is free software
@@ -10,6 +11,7 @@
 /** ****************************************************************************
 *** \file    tex_mgmt.h
 *** \author  Raj Sharma, roos@allacrost.org
+*** \author  Yohann Ferreira, yohann ferreira orange fr
 *** \brief   Source file for texture management code
 *** ***************************************************************************/
 
@@ -17,9 +19,9 @@
 
 #include "texture.h"
 
-using namespace hoa_utils;
+using namespace vt_utils;
 
-namespace hoa_video
+namespace vt_video
 {
 
 namespace private_video
@@ -598,4 +600,4 @@ void VariableTexSheet::_SetBlockProperties(BaseTexture *tex, BaseTexture *new_te
 
 } // namespace private_video
 
-} // namespace hoa_video
+} // namespace vt_video

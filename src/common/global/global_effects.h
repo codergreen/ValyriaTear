@@ -1,5 +1,6 @@
 ////////////////////////////////////////////////////////////////////////////////
-//            Copyright (C) 2004-2007 by The Allacrost Project
+//            Copyright (C) 2004-2011 by The Allacrost Project
+//            Copyright (C) 2012-2013 by Bertram (Valyria Tear)
 //                         All Rights Reserved
 //
 // This code is licensed under the GNU GPL version 2. It is free software
@@ -10,6 +11,7 @@
 /** ****************************************************************************
 *** \file    global_effects.h
 *** \author  Jacob Rudolph, rujasu@allacrost.org
+*** \author  Yohann Ferreira, yohann ferreira orange fr
 *** \brief   Header file for global game effects
 ***
 *** This file contains the class implementation for status and elemental effects.
@@ -26,7 +28,7 @@
 
 #include "global_utils.h"
 
-namespace hoa_global
+namespace vt_global
 {
 
 /** \brief Retrieves a string representation for any GLOBAL_ELEMENTAL enum value
@@ -167,6 +169,6 @@ protected:
     GLOBAL_INTENSITY _intensity;
 }; // class GlobalStatusEffect
 
-} // namespace hoa_global
+} // namespace vt_global
 
 #endif // __GLOBAL_EFFECTS_HEADER__

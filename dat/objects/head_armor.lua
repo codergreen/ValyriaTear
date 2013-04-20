@@ -24,6 +24,7 @@
 -- {standard_price}: The standard asking price of this armor from merchants.
 -- {usable_by}: A list of characters which may equip this armor,
 -- {slots}: The number of slots available to equip shards on the armor.
+-- {key_item}: Tells whether the item is a key item, preventing it from being consumed or sold.
 ------------------------------------------------------------------------------]]
 
 -- All armor definitions are stored in this table
@@ -37,18 +38,19 @@ end
 -- -----------------------------------------------------------------------------
 
 armor[20001] = {
-	name = hoa_system.Translate("Butterfly hair tong"),
-	description = hoa_system.Translate("An old and finely done piece of jewelery."),
+	name = vt_system.Translate("Butterfly hair tong"),
+	description = vt_system.Translate("An old and finely done piece of jewelery."),
 	icon = "img/icons/armor/butterfly_hair_tong.png",
 	physical_defense = 3,
 	magical_defense = 12,
 	standard_price = 450,
-	usable_by = KALYA
+	usable_by = KALYA,
+    key_item = true
 }
 
 armor[20011] = {
-	name = hoa_system.Translate("Standard Helmet"),
-	description = hoa_system.Translate("Standard Karlate issued equipment. Battle worn but reliable head protection."),
+	name = vt_system.Translate("Standard Helmet"),
+	description = vt_system.Translate("Standard Karlate issued equipment. Battle worn but reliable head protection."),
 	icon = "img/icons/armor/karlate_helmet.png",
 	physical_defense = 6,
 	magical_defense = 2,
@@ -58,8 +60,8 @@ armor[20011] = {
 }
 
 armor[20012] = {
-	name = hoa_system.Translate("Cobalt Helm"),
-	description = hoa_system.Translate("A small helmet composed of a secret cobalt based alloy."),
+	name = vt_system.Translate("Cobalt Helm"),
+	description = vt_system.Translate("A small helmet composed of a secret cobalt based alloy."),
 	icon = "img/icons/armor/cobalt_helm.png",
 	physical_defense = 8,
 	magical_defense = 4,
@@ -69,8 +71,8 @@ armor[20012] = {
 }
 
 armor[20013] = {
-	name = hoa_system.Translate("Crested Helmet"),
-	description = hoa_system.Translate("A sturdy helmet with a hinged face guard offering additional protection."),
+	name = vt_system.Translate("Crested Helmet"),
+	description = vt_system.Translate("A sturdy helmet with a hinged face guard offering additional protection."),
 	icon = "img/icons/armor/crested_helmet.png",
 	physical_defense = 11,
 	magical_defense = 6,
